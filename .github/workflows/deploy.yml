@@ -90,27 +90,27 @@ jobs:
       - name: Resolve EC2 host by Instance ID
         run: |
           set -euo pipefail
-          
+
           echo "[Info] Checking EC2 instance: ${{ env.INSTANCE_ID }}"
-          
+
           # 인스턴스 상태 확인
           INSTANCE_STATE="$(aws ec2 describe-instances \
             --instance-ids "${{ env.INSTANCE_ID }}" \
             --region "${{ env.AWS_REGION }}" \
             --query 'Reservations[0].Instances[0].State.Name' \
             --output text 2>/dev/null || echo "not-found")"
-          
+
           if [[ "${INSTANCE_STATE}" == "not-found" ]] || [[ -z "${INSTANCE_STATE}" ]]; then
             echo "❌ Error: Instance ${{ env.INSTANCE_ID }} not found"
             exit 1
           fi
-          
+
           echo "[Info] Instance state: ${INSTANCE_STATE}"
-          
+
           if [[ "${INSTANCE_STATE}" != "running" ]]; then
             echo "⚠️  Warning: Instance is not in 'running' state. Current state: ${INSTANCE_STATE}"
           fi
-          
+
           # PublicDnsName 확인
           EC2_HOST="$(aws ec2 describe-instances \
             --instance-ids "${{ env.INSTANCE_ID }}" \
@@ -328,27 +328,27 @@ jobs:
       - name: Resolve EC2 host by Instance ID
         run: |
           set -euo pipefail
-          
+
           echo "[Info] Checking EC2 instance: ${{ env.INSTANCE_ID }}"
-          
+
           # 인스턴스 상태 확인
           INSTANCE_STATE="$(aws ec2 describe-instances \
             --instance-ids "${{ env.INSTANCE_ID }}" \
             --region "${{ env.AWS_REGION }}" \
             --query 'Reservations[0].Instances[0].State.Name' \
             --output text 2>/dev/null || echo "not-found")"
-          
+
           if [[ "${INSTANCE_STATE}" == "not-found" ]] || [[ -z "${INSTANCE_STATE}" ]]; then
             echo "❌ Error: Instance ${{ env.INSTANCE_ID }} not found"
             exit 1
           fi
-          
+
           echo "[Info] Instance state: ${INSTANCE_STATE}"
-          
+
           if [[ "${INSTANCE_STATE}" != "running" ]]; then
             echo "⚠️  Warning: Instance is not in 'running' state. Current state: ${INSTANCE_STATE}"
           fi
-          
+
           # PublicDnsName 확인
           EC2_HOST="$(aws ec2 describe-instances \
             --instance-ids "${{ env.INSTANCE_ID }}" \
