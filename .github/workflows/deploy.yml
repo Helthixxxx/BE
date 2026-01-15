@@ -5,7 +5,7 @@ on:
     branches: [main, master]
 
 concurrency:
-  group: rolling-deploy
+  group: shm
   cancel-in-progress: true
 
 defaults:
@@ -28,6 +28,18 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Get Github Actions IP
+        id: ip
+        uses: haythem/public-ip@v1.2
+
+      - name: Add Github Actions IP to security group
+        run: |
+          aws ec2 authorize-security-group-ingress \
+            --group-name ${{ secrets.AWS_SG_NAME }} \
+            --protocol tcp \
+            --port 22 \
+            --cidr ${{ steps.ip.outputs.ipv4 }}/32
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -91,6 +103,12 @@ jobs:
               --output text)"
           fi
 
+          # 추가: 둘 다 없으면 에러
+          if [[ -z "${EC2_HOST}" || "${EC2_HOST}" == "None" ]]; then
+            echo "❌ Error: Cannot resolve EC2 host (Instance ID: ${{ env.INSTANCE_ID }})"
+            exit 1
+          fi
+
           echo "EC2_HOST=${EC2_HOST}"
           echo "EC2_HOST=${EC2_HOST}" >> "$GITHUB_ENV"
 
@@ -101,7 +119,10 @@ jobs:
           mkdir -p ~/.ssh
           printf "%s" "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "${EC2_HOST}" >> ~/.ssh/known_hosts
+          ssh-keyscan -H "${EC2_HOST}" >> ~/.ssh/known_hosts || {
+            echo "❌ Error: Failed to scan SSH host key for ${EC2_HOST}"
+            exit 1
+          }
 
       - name: Drain instance from Target Group
         run: |
@@ -148,7 +169,7 @@ jobs:
           : "${AWS_REGION:?AWS_REGION is not set}"
           : "${AWS_ACCOUNT_ID:?AWS_ACCOUNT_ID is not set}"
 
-          cd ~/RollingDeployment
+          cd ~/shm
 
           ECR_REGISTRY="${IMAGE_URI%:*}"
           IMAGE_TAG="${IMAGE_URI##*:}"
@@ -225,6 +246,27 @@ jobs:
             --targets Id="${{ env.INSTANCE_ID }}" \
             --region "${{ env.AWS_REGION }}"
           exit 1
+
+      - name: Get Github Actions IP
+        if: always()
+        id: ip
+        uses: haythem/public-ip@v1.2
+
+      - name: Remove Github Actions IP from security group
+        if: always()
+        run: |
+          set -euo pipefail
+          aws ec2 revoke-security-group-ingress \
+            --group-name ${{ secrets.AWS_SG_NAME }} \
+            --protocol tcp \
+            --port 22 \
+            --cidr ${{ steps.ip.outputs.ipv4 }}/32 \
+            --region "${{ env.AWS_REGION }}" || true
+
+      - name: Cleanup SSH keys
+        if: always()
+        run: |
+          rm -f ~/.ssh/deploy_key ~/.ssh/known_hosts
 
   deploy-ec2-2:
     needs: [build-and-push, deploy-ec2-1]
@@ -255,6 +297,13 @@ jobs:
               --query 'Reservations[0].Instances[0].PublicIpAddress' \
               --output text)"
           fi
+
+          # 추가: 둘 다 없으면 에러
+          if [[ -z "${EC2_HOST}" || "${EC2_HOST}" == "None" ]]; then
+            echo "❌ Error: Cannot resolve EC2 host (Instance ID: ${{ env.INSTANCE_ID }})"
+            exit 1
+          fi
+
           echo "EC2_HOST=${EC2_HOST}"
           echo "EC2_HOST=${EC2_HOST}" >> "$GITHUB_ENV"
 
@@ -265,7 +314,10 @@ jobs:
           mkdir -p ~/.ssh
           printf "%s" "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "${EC2_HOST}" >> ~/.ssh/known_hosts
+          ssh-keyscan -H "${EC2_HOST}" >> ~/.ssh/known_hosts || {
+            echo "❌ Error: Failed to scan SSH host key for ${EC2_HOST}"
+            exit 1
+          }
 
       - name: Drain instance from Target Group
         run: |
@@ -312,7 +364,7 @@ jobs:
           : "${AWS_REGION:?AWS_REGION is not set}"
           : "${AWS_ACCOUNT_ID:?AWS_ACCOUNT_ID is not set}"
 
-          cd ~/RollingDeployment
+          cd ~/BE
 
           ECR_REGISTRY="${IMAGE_URI%:*}"
           IMAGE_TAG="${IMAGE_URI##*:}"
@@ -389,3 +441,24 @@ jobs:
             --targets Id="${{ env.INSTANCE_ID }}" \
             --region "${{ env.AWS_REGION }}"
           exit 1
+
+      - name: Get Github Actions IP
+        if: always()
+        id: ip
+        uses: haythem/public-ip@v1.2
+
+      - name: Remove Github Actions IP from security group
+        if: always()
+        run: |
+          set -euo pipefail
+          aws ec2 revoke-security-group-ingress \
+            --group-name ${{ secrets.AWS_SG_NAME }} \
+            --protocol tcp \
+            --port 22 \
+            --cidr ${{ steps.ip.outputs.ipv4 }}/32 \
+            --region "${{ env.AWS_REGION }}" || true
+
+      - name: Cleanup SSH keys
+        if: always()
+        run: |
+          rm -f ~/.ssh/deploy_key ~/.ssh/known_hosts
