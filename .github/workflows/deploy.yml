@@ -1,0 +1,391 @@
+name: Build and Deploy to ECR/EC2 (Rolling)
+
+on:
+  push:
+    branches: [main, master]
+
+concurrency:
+  group: rolling-deploy
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECR_REPOSITORY: shm
+  TARGET_GROUP_ARN: arn:aws:elasticloadbalancing:ap-northeast-2:466279485907:targetgroup/SHM-TG/425397d34f4b782a
+  AWS_ACCOUNT_ID: '466279485907'
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.git-sha.outputs.sha }}
+      image_uri: ${{ steps.image-uri.outputs.uri }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Get Git SHA
+        id: git-sha
+        run: echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build, tag, and push image to Amazon ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.git-sha.outputs.sha }}
+        run: |
+          set -euo pipefail
+          docker build -t "${ECR_REGISTRY}/${{ env.ECR_REPOSITORY }}:${IMAGE_TAG}" .
+          docker tag  "${ECR_REGISTRY}/${{ env.ECR_REPOSITORY }}:${IMAGE_TAG}" "${ECR_REGISTRY}/${{ env.ECR_REPOSITORY }}:latest"
+          docker push "${ECR_REGISTRY}/${{ env.ECR_REPOSITORY }}:${IMAGE_TAG}"
+          docker push "${ECR_REGISTRY}/${{ env.ECR_REPOSITORY }}:latest"
+
+      - name: Export IMAGE_URI
+        id: image-uri
+        run: |
+          echo "uri=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.git-sha.outputs.sha }}" >> "$GITHUB_OUTPUT"
+
+  deploy-ec2-1:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    env:
+      INSTANCE_ID: i-0be11a94eef742762
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve EC2 host by Instance ID
+        run: |
+          set -euo pipefail
+          EC2_HOST="$(aws ec2 describe-instances \
+            --instance-ids "${{ env.INSTANCE_ID }}" \
+            --region "${{ env.AWS_REGION }}" \
+            --query 'Reservations[0].Instances[0].PublicDnsName' \
+            --output text)"
+
+          if [[ -z "${EC2_HOST}" || "${EC2_HOST}" == "None" ]]; then
+            EC2_HOST="$(aws ec2 describe-instances \
+              --instance-ids "${{ env.INSTANCE_ID }}" \
+              --region "${{ env.AWS_REGION }}" \
+              --query 'Reservations[0].Instances[0].PublicIpAddress' \
+              --output text)"
+          fi
+
+          echo "EC2_HOST=${EC2_HOST}"
+          echo "EC2_HOST=${EC2_HOST}" >> "$GITHUB_ENV"
+
+      - name: Setup SSH
+        run: |
+          set -euo pipefail
+          : "${EC2_HOST:?EC2_HOST is not set}"
+          mkdir -p ~/.ssh
+          printf "%s" "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${EC2_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Drain instance from Target Group
+        run: |
+          set -euo pipefail
+          aws elbv2 deregister-targets \
+            --target-group-arn "${{ env.TARGET_GROUP_ARN }}" \
+            --targets Id="${{ env.INSTANCE_ID }}" \
+            --region "${{ env.AWS_REGION }}"
+
+          echo "[Drain] Waiting state draining/unused..."
+          for i in $(seq 1 30); do
+            STATE="$(aws elbv2 describe-target-health \
+              --target-group-arn "${{ env.TARGET_GROUP_ARN }}" \
+              --targets Id="${{ env.INSTANCE_ID }}" \
+              --region "${{ env.AWS_REGION }}" \
+              --query 'TargetHealthDescriptions[0].TargetHealth.State' \
+              --output text 2>/dev/null || true)"
+            echo "  - state=${STATE} (${i}/30)"
+            if [[ "${STATE}" == "draining" || "${STATE}" == "unused" ]]; then
+              break
+            fi
+            sleep 5
+          done
+
+      - name: Deploy on EC2 (pull/up + health checks)
+        env:
+          IMAGE_URI: ${{ needs.build-and-push.outputs.image_uri }}
+        run: |
+          set -euo pipefail
+          : "${IMAGE_URI:?IMAGE_URI is not set}"
+          : "${EC2_HOST:?EC2_HOST is not set}"
+
+          echo "[Deploy] IMAGE_URI=${IMAGE_URI}"
+
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            -o ServerAliveInterval=60 \
+            -o ServerAliveCountMax=10 \
+            -o ConnectTimeout=10 \
+            ubuntu@"${EC2_HOST}" \
+            "IMAGE_URI='${IMAGE_URI}' AWS_REGION='${AWS_REGION}' AWS_ACCOUNT_ID='${AWS_ACCOUNT_ID}' bash -se" <<'EOS'
+          set -euo pipefail
+          : "${IMAGE_URI:?IMAGE_URI is not set}"
+          : "${AWS_REGION:?AWS_REGION is not set}"
+          : "${AWS_ACCOUNT_ID:?AWS_ACCOUNT_ID is not set}"
+
+          cd ~/RollingDeployment
+
+          ECR_REGISTRY="${IMAGE_URI%:*}"
+          IMAGE_TAG="${IMAGE_URI##*:}"
+
+          printf "ECR_REGISTRY=%s\nIMAGE_TAG=%s\nIMAGE_URI=%s\n" \
+            "${ECR_REGISTRY}" "${IMAGE_TAG}" "${IMAGE_URI}" > .env.deploy
+
+          echo '=== .env.deploy ==='
+          cat .env.deploy
+
+          aws ecr get-login-password --region "${AWS_REGION}" \
+            | sudo docker login --username AWS --password-stdin \
+              "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+          sudo docker compose --env-file .env.deploy pull
+          sudo docker compose --env-file .env.deploy up -d --remove-orphans
+          sudo docker compose ps
+
+          for i in $(seq 1 20); do
+            if curl -fsS --max-time 1 http://localhost:3000/health >/dev/null; then
+              echo "[Check] localhost health OK"
+              exit 0
+            fi
+            echo "[Check] localhost health retry ${i}/20"
+            sleep 3
+          done
+
+          echo "[Check] localhost health FAILED"
+          sudo docker compose logs --tail=200
+          exit 1
+          EOS
+
+      - name: Re-register instance to Target Group
+        run: |
+          set -euo pipefail
+          aws elbv2 register-targets \
+            --target-group-arn "${{ env.TARGET_GROUP_ARN }}" \
+            --targets Id="${{ env.INSTANCE_ID }}" \
+            --region "${{ env.AWS_REGION }}"
+
+      - name: Wait until Target Group becomes healthy (print reason on fail)
+        run: |
+          set -euo pipefail
+          echo "[TG] Waiting for healthy (max 90s)..."
+          for i in $(seq 1 18); do
+            STATE="$(aws elbv2 describe-target-health \
+              --target-group-arn "${{ env.TARGET_GROUP_ARN }}" \
+              --targets Id="${{ env.INSTANCE_ID }}" \
+              --region "${{ env.AWS_REGION }}" \
+              --query 'TargetHealthDescriptions[0].TargetHealth.State' \
+              --output text)"
+            REASON="$(aws elbv2 describe-target-health \
+              --target-group-arn "${{ env.TARGET_GROUP_ARN }}" \
+              --targets Id="${{ env.INSTANCE_ID }}" \
+              --region "${{ env.AWS_REGION }}" \
+              --query 'TargetHealthDescriptions[0].TargetHealth.Reason' \
+              --output text)"
+            DESC="$(aws elbv2 describe-target-health \
+              --target-group-arn "${{ env.TARGET_GROUP_ARN }}" \
+              --targets Id="${{ env.INSTANCE_ID }}" \
+              --region "${{ env.AWS_REGION }}" \
+              --query 'TargetHealthDescriptions[0].TargetHealth.Description' \
+              --output text)"
+            echo "  - state=${STATE} (${i}/18) reason=${REASON} desc=${DESC}"
+            if [[ "${STATE}" == "healthy" ]]; then
+              echo "✅ Target healthy"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "❌ Target not healthy. Full describe:"
+          aws elbv2 describe-target-health \
+            --target-group-arn "${{ env.TARGET_GROUP_ARN }}" \
+            --targets Id="${{ env.INSTANCE_ID }}" \
+            --region "${{ env.AWS_REGION }}"
+          exit 1
+
+  deploy-ec2-2:
+    needs: [build-and-push, deploy-ec2-1]
+    runs-on: ubuntu-latest
+    env:
+      INSTANCE_ID: i-0ea916671ef3499da
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve EC2 host by Instance ID
+        run: |
+          set -euo pipefail
+          EC2_HOST="$(aws ec2 describe-instances \
+            --instance-ids "${{ env.INSTANCE_ID }}" \
+            --region "${{ env.AWS_REGION }}" \
+            --query 'Reservations[0].Instances[0].PublicDnsName' \
+            --output text)"
+          if [[ -z "${EC2_HOST}" || "${EC2_HOST}" == "None" ]]; then
+            EC2_HOST="$(aws ec2 describe-instances \
+              --instance-ids "${{ env.INSTANCE_ID }}" \
+              --region "${{ env.AWS_REGION }}" \
+              --query 'Reservations[0].Instances[0].PublicIpAddress' \
+              --output text)"
+          fi
+          echo "EC2_HOST=${EC2_HOST}"
+          echo "EC2_HOST=${EC2_HOST}" >> "$GITHUB_ENV"
+
+      - name: Setup SSH
+        run: |
+          set -euo pipefail
+          : "${EC2_HOST:?EC2_HOST is not set}"
+          mkdir -p ~/.ssh
+          printf "%s" "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${EC2_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Drain instance from Target Group
+        run: |
+          set -euo pipefail
+          aws elbv2 deregister-targets \
+            --target-group-arn "${{ env.TARGET_GROUP_ARN }}" \
+            --targets Id="${{ env.INSTANCE_ID }}" \
+            --region "${{ env.AWS_REGION }}"
+
+          echo "[Drain] Waiting state draining/unused..."
+          for i in $(seq 1 30); do
+            STATE="$(aws elbv2 describe-target-health \
+              --target-group-arn "${{ env.TARGET_GROUP_ARN }}" \
+              --targets Id="${{ env.INSTANCE_ID }}" \
+              --region "${{ env.AWS_REGION }}" \
+              --query 'TargetHealthDescriptions[0].TargetHealth.State' \
+              --output text 2>/dev/null || true)"
+            echo "  - state=${STATE} (${i}/30)"
+            if [[ "${STATE}" == "draining" || "${STATE}" == "unused" ]]; then
+              break
+            fi
+            sleep 5
+          done
+
+      - name: Deploy on EC2 (pull/up + health checks)
+        env:
+          IMAGE_URI: ${{ needs.build-and-push.outputs.image_uri }}
+        run: |
+          set -euo pipefail
+          : "${IMAGE_URI:?IMAGE_URI is not set}"
+          : "${EC2_HOST:?EC2_HOST is not set}"
+
+          echo "[Deploy] IMAGE_URI=${IMAGE_URI}"
+
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            -o ServerAliveInterval=60 \
+            -o ServerAliveCountMax=10 \
+            -o ConnectTimeout=10 \
+            ubuntu@"${EC2_HOST}" \
+            "IMAGE_URI='${IMAGE_URI}' AWS_REGION='${AWS_REGION}' AWS_ACCOUNT_ID='${AWS_ACCOUNT_ID}' bash -se" <<'EOS'
+          set -euo pipefail
+          : "${IMAGE_URI:?IMAGE_URI is not set}"
+          : "${AWS_REGION:?AWS_REGION is not set}"
+          : "${AWS_ACCOUNT_ID:?AWS_ACCOUNT_ID is not set}"
+
+          cd ~/RollingDeployment
+
+          ECR_REGISTRY="${IMAGE_URI%:*}"
+          IMAGE_TAG="${IMAGE_URI##*:}"
+
+          printf "ECR_REGISTRY=%s\nIMAGE_TAG=%s\nIMAGE_URI=%s\n" \
+            "${ECR_REGISTRY}" "${IMAGE_TAG}" "${IMAGE_URI}" > .env.deploy
+
+          echo '=== .env.deploy ==='
+          cat .env.deploy
+
+          aws ecr get-login-password --region "${AWS_REGION}" \
+            | sudo docker login --username AWS --password-stdin \
+              "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+          sudo docker compose --env-file .env.deploy pull
+          sudo docker compose --env-file .env.deploy up -d --remove-orphans
+          sudo docker compose ps
+
+          for i in $(seq 1 20); do
+            if curl -fsS --max-time 1 http://localhost:3000/health >/dev/null; then
+              echo "[Check] localhost health OK"
+              exit 0
+            fi
+            echo "[Check] localhost health retry ${i}/20"
+            sleep 3
+          done
+
+          echo "[Check] localhost health FAILED"
+          sudo docker compose logs --tail=200
+          exit 1
+          EOS
+
+      - name: Re-register instance to Target Group
+        run: |
+          set -euo pipefail
+          aws elbv2 register-targets \
+            --target-group-arn "${{ env.TARGET_GROUP_ARN }}" \
+            --targets Id="${{ env.INSTANCE_ID }}" \
+            --region "${{ env.AWS_REGION }}"
+
+      - name: Wait until Target Group becomes healthy (print reason on fail)
+        run: |
+          set -euo pipefail
+          echo "[TG] Waiting for healthy (max 90s)..."
+          for i in $(seq 1 18); do
+            STATE="$(aws elbv2 describe-target-health \
+              --target-group-arn "${{ env.TARGET_GROUP_ARN }}" \
+              --targets Id="${{ env.INSTANCE_ID }}" \
+              --region "${{ env.AWS_REGION }}" \
+              --query 'TargetHealthDescriptions[0].TargetHealth.State' \
+              --output text)"
+            REASON="$(aws elbv2 describe-target-health \
+              --target-group-arn "${{ env.TARGET_GROUP_ARN }}" \
+              --targets Id="${{ env.INSTANCE_ID }}" \
+              --region "${{ env.AWS_REGION }}" \
+              --query 'TargetHealthDescriptions[0].TargetHealth.Reason' \
+              --output text)"
+            DESC="$(aws elbv2 describe-target-health \
+              --target-group-arn "${{ env.TARGET_GROUP_ARN }}" \
+              --targets Id="${{ env.INSTANCE_ID }}" \
+              --region "${{ env.AWS_REGION }}" \
+              --query 'TargetHealthDescriptions[0].TargetHealth.Description' \
+              --output text)"
+            echo "  - state=${STATE} (${i}/18) reason=${REASON} desc=${DESC}"
+            if [[ "${STATE}" == "healthy" ]]; then
+              echo "✅ Target healthy"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "❌ Target not healthy. Full describe:"
+          aws elbv2 describe-target-health \
+            --target-group-arn "${{ env.TARGET_GROUP_ARN }}" \
+            --targets Id="${{ env.INSTANCE_ID }}" \
+            --region "${{ env.AWS_REGION }}"
+          exit 1
