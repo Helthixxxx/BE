@@ -87,6 +87,19 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Get Github Actions IP
+        id: ip
+        uses: haythem/public-ip@v1.2
+
+      - name: Add Github Actions IP to security group
+        run: |
+          aws ec2 authorize-security-group-ingress \
+            --group-name ${{ secrets.AWS_SG_NAME }} \
+            --protocol tcp \
+            --port 22 \
+            --cidr ${{ steps.ip.outputs.ipv4 }}/32 \
+            --region "${{ env.AWS_REGION }}" || true
+
       - name: Resolve EC2 host by Instance ID
         run: |
           set -euo pipefail
@@ -324,6 +337,19 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get Github Actions IP
+        id: ip
+        uses: haythem/public-ip@v1.2
+
+      - name: Add Github Actions IP to security group
+        run: |
+          aws ec2 authorize-security-group-ingress \
+            --group-name ${{ secrets.AWS_SG_NAME }} \
+            --protocol tcp \
+            --port 22 \
+            --cidr ${{ steps.ip.outputs.ipv4 }}/32 \
+            --region "${{ env.AWS_REGION }}" || true
 
       - name: Resolve EC2 host by Instance ID
         run: |
