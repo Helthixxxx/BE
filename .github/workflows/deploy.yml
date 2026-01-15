@@ -225,7 +225,7 @@ jobs:
           : "${AWS_REGION:?AWS_REGION is not set}"
           : "${AWS_ACCOUNT_ID:?AWS_ACCOUNT_ID is not set}"
 
-          cd ~/shm
+          cd ~/BE
 
           ECR_REGISTRY="${IMAGE_URI%:*}"
           IMAGE_TAG="${IMAGE_URI##*:}"
