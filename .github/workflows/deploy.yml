@@ -77,7 +77,7 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     env:
-      INSTANCE_ID: i-0be11a94eef742762
+      INSTANCE_ID: i-0099cbb3141b857b8
 
     steps:
       - name: Configure AWS credentials
@@ -315,7 +315,7 @@ jobs:
     needs: [build-and-push, deploy-ec2-1]
     runs-on: ubuntu-latest
     env:
-      INSTANCE_ID: i-0ea916671ef3499da
+      INSTANCE_ID: i-0fb44c8a6e784deea
 
     steps:
       - name: Configure AWS credentials
