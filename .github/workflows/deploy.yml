@@ -2,7 +2,7 @@ name: Build and Deploy to ECR/EC2 (Rolling)
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
 
 concurrency:
   group: shm
@@ -231,17 +231,17 @@ jobs:
           IMAGE_TAG="${IMAGE_URI##*:}"
 
           printf "ECR_REGISTRY=%s\nIMAGE_TAG=%s\nIMAGE_URI=%s\n" \
-            "${ECR_REGISTRY}" "${IMAGE_TAG}" "${IMAGE_URI}" > .env.deploy
+            "${ECR_REGISTRY}" "${IMAGE_TAG}" "${IMAGE_URI}" > .env
 
-          echo '=== .env.deploy ==='
-          cat .env.deploy
+          echo '=== .env ==='
+          cat .env
 
           aws ecr get-login-password --region "${AWS_REGION}" \
             | sudo docker login --username AWS --password-stdin \
               "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
-          sudo docker compose --env-file .env.deploy pull
-          sudo docker compose --env-file .env.deploy up -d --remove-orphans
+          sudo docker compose pull
+          sudo docker compose up -d --remove-orphans
           sudo docker compose ps
 
           for i in $(seq 1 20); do
@@ -477,17 +477,17 @@ jobs:
           IMAGE_TAG="${IMAGE_URI##*:}"
 
           printf "ECR_REGISTRY=%s\nIMAGE_TAG=%s\nIMAGE_URI=%s\n" \
-            "${ECR_REGISTRY}" "${IMAGE_TAG}" "${IMAGE_URI}" > .env.deploy
+            "${ECR_REGISTRY}" "${IMAGE_TAG}" "${IMAGE_URI}" > .env
 
-          echo '=== .env.deploy ==='
-          cat .env.deploy
+          echo '=== .env ==='
+          cat .env
 
           aws ecr get-login-password --region "${AWS_REGION}" \
             | sudo docker login --username AWS --password-stdin \
               "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
-          sudo docker compose --env-file .env.deploy pull
-          sudo docker compose --env-file .env.deploy up -d --remove-orphans
+          sudo docker compose pull
+          sudo docker compose up -d --remove-orphans
           sudo docker compose ps
 
           for i in $(seq 1 20); do
