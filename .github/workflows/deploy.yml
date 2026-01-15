@@ -303,11 +303,6 @@ jobs:
             --region "${{ env.AWS_REGION }}"
           exit 1
 
-      - name: Get Github Actions IP
-        if: always()
-        id: ip
-        uses: haythem/public-ip@v1.2
-
       - name: Remove Github Actions IP from security group
         if: always()
         run: |
@@ -553,11 +548,6 @@ jobs:
             --targets Id="${{ env.INSTANCE_ID }}" \
             --region "${{ env.AWS_REGION }}"
           exit 1
-
-      - name: Get Github Actions IP
-        if: always()
-        id: ip
-        uses: haythem/public-ip@v1.2
 
       - name: Remove Github Actions IP from security group
         if: always()
