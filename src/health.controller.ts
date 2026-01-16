@@ -1,9 +1,16 @@
 import { Controller, Get } from '@nestjs/common';
+import * as os from 'os';
 
 @Controller()
 export class HealthController {
   @Get('/health')
   health() {
-    return { status: 'ok' };
+    const hostname = os.hostname();
+    return {
+      status: 'ok',
+      instanceId: hostname,
+      hostname,
+      timestamp: new Date().toISOString(),
+    };
   }
 }
