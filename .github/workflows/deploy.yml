@@ -94,6 +94,9 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Deploy to EC2
         uses: ./.github/actions/deploy-ec2
         env:
@@ -112,6 +115,9 @@ jobs:
     needs: [build-and-push, deploy-ec2-1]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Deploy to EC2
         uses: ./.github/actions/deploy-ec2
         env:
