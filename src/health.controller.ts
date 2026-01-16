@@ -9,7 +9,6 @@ export class HealthController {
     return {
       status: 'ok',
       instanceId: hostname,
-      hostname,
       timestamp: new Date().toISOString(),
     };
   }
