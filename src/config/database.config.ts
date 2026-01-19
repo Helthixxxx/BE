@@ -18,7 +18,7 @@ export default registerAs(
     logging: process.env.DB_LOGGING === 'true',
     entities: [__dirname + '/../**/*.entity{.ts,.js}'],
     migrations: [__dirname + '/../migrations/*{.ts,.js}'],
-    migrationsRun: false,
+    migrationsRun: process.env.DB_MIGRATIONS_RUN === 'true', // 환경변수로 제어 가능
     migrationsTableName: 'migrations',
     // SSL 설정: AWS RDS는 기본적으로 SSL을 지원하므로 활성화
     // 로컬 개발 환경(DB_HOST가 localhost인 경우)이 아닐 때만 SSL 사용
