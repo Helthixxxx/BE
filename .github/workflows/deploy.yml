@@ -17,9 +17,59 @@ env:
   ECR_REPOSITORY: shm
   TARGET_GROUP_ARN: arn:aws:elasticloadbalancing:ap-northeast-2:466279485907:targetgroup/SHM-TG/425397d34f4b782a
   AWS_ACCOUNT_ID: '466279485907'
+  SLACK_WEBHOOK_URL: 'https://hooks.slack.com/services/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'
 
 jobs:
+  notify-deploy-start:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get Git SHA
+        id: git-sha
+        run: echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Send Slack notification - Deploy Started
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{
+              "text": "🚀 배포 시작",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "🚀 배포 시작"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*브랜치:*\n${{ github.ref_name }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*커밋:*\n<${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ steps.git-sha.outputs.sha }}>"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*작업:*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|워크플로우 보기>"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*트리거:*\n${{ github.event.head_commit.message }}"
+                    }
+                  ]
+                }
+              ]
+            }' \
+            ${{ env.SLACK_WEBHOOK_URL }}
+
   build-and-push:
+    needs: notify-deploy-start
     runs-on: ubuntu-latest
     outputs:
       image_tag: ${{ steps.git-sha.outputs.sha }}
@@ -90,12 +140,51 @@ jobs:
             }
           echo "✅ Successfully removed IP: ${{ steps.ip.outputs.ipv4 }}/32"
 
+      - name: Send Slack notification - Build Failed
+        if: failure()
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{
+              "text": "❌ 빌드 실패",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "❌ 빌드 실패"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*브랜치:*\n${{ github.ref_name }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*커밋:*\n<${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ steps.git-sha.outputs.sha }}>"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*작업:*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|워크플로우 보기>"
+                    }
+                  ]
+                }
+              ]
+            }' \
+            ${{ env.SLACK_WEBHOOK_URL }}
+
   deploy-ec2-1:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Get Git SHA
+        id: git-sha
+        run: echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Deploy to EC2
         uses: ./.github/actions/deploy-ec2
@@ -111,12 +200,51 @@ jobs:
           ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           sg-name: ${{ secrets.AWS_SG_NAME }}
 
+      - name: Send Slack notification - Deploy EC2-1 Failed
+        if: failure()
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{
+              "text": "❌ EC2-1 배포 실패",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "❌ EC2-1 배포 실패"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*인스턴스:*\nEC2-1"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*이미지:*\n${{ needs.build-and-push.outputs.image_uri }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*작업:*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|워크플로우 보기>"
+                    }
+                  ]
+                }
+              ]
+            }' \
+            ${{ env.SLACK_WEBHOOK_URL }}
+
   deploy-ec2-2:
     needs: [build-and-push, deploy-ec2-1]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Get Git SHA
+        id: git-sha
+        run: echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Deploy to EC2
         uses: ./.github/actions/deploy-ec2
@@ -131,3 +259,95 @@ jobs:
           aws-account-id: ${{ env.AWS_ACCOUNT_ID }}
           ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           sg-name: ${{ secrets.AWS_SG_NAME }}
+
+      - name: Send Slack notification - Deploy EC2-2 Failed
+        if: failure()
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{
+              "text": "❌ EC2-2 배포 실패",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "❌ EC2-2 배포 실패"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*인스턴스:*\nEC2-2"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*이미지:*\n${{ needs.build-and-push.outputs.image_uri }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*작업:*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|워크플로우 보기>"
+                    }
+                  ]
+                }
+              ]
+            }' \
+            ${{ env.SLACK_WEBHOOK_URL }}
+
+  notify-deploy-success:
+    needs: [build-and-push, deploy-ec2-1, deploy-ec2-2]
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get Git SHA
+        id: git-sha
+        run: echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Send Slack notification - Deploy Success
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{
+              "text": "✅ 배포 성공",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "✅ 배포 성공"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*브랜치:*\n${{ github.ref_name }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*커밋:*\n<${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ steps.git-sha.outputs.sha }}>"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*이미지:*\n${{ needs.build-and-push.outputs.image_uri }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*작업:*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|워크플로우 보기>"
+                    }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*배포된 인스턴스:*\n• EC2-1\n• EC2-2"
+                  }
+                }
+              ]
+            }' \
+            ${{ env.SLACK_WEBHOOK_URL }}
