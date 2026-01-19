@@ -8,6 +8,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Request 타입 확장 (requestId 포함)
@@ -37,7 +38,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<RequestWithId>();
-    const requestId = request.requestId || 'unknown';
+    // requestId가 없으면 즉시 생성하여 request 객체에 저장
+    if (!request.requestId) {
+      request.requestId = uuidv4();
+    }
+    const requestId = request.requestId;
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let errorCode = 'INTERNAL_ERROR';

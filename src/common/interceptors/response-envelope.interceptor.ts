@@ -7,6 +7,7 @@ import {
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { Request } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Request 타입 확장 (requestId 포함)
@@ -39,7 +40,11 @@ export class ResponseEnvelopeInterceptor implements NestInterceptor {
     next: CallHandler,
   ): Observable<ResponseEnvelope<T>> {
     const request = context.switchToHttp().getRequest<RequestWithId>();
-    const requestId = request.requestId || 'unknown';
+    // requestId가 없으면 즉시 생성하여 request 객체에 저장
+    if (!request.requestId) {
+      request.requestId = uuidv4();
+    }
+    const requestId = request.requestId;
 
     return next.handle().pipe(
       map((data: T) => {

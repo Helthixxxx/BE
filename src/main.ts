@@ -1,15 +1,36 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { Request, Response, NextFunction } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { ResponseEnvelopeInterceptor } from './common/interceptors/response-envelope.interceptor';
 
+/**
+ * Request 타입 확장 (requestId 포함)
+ */
+interface RequestWithId extends Request {
+  requestId?: string;
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // RequestIdMiddleware를 가장 먼저 실행되도록 등록
+  // CORS 에러 등 미들웨어 실행 전 에러에도 requestId를 포함하기 위함
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    // requestId를 request 객체에 저장
+    (req as RequestWithId).requestId = uuidv4();
+    next();
+  });
+
   // CORS 설정
-  const allowedOrigins = ['http://localhost:3001', 'https://admin.nextdot.kr'];
+  const allowedOrigins = [
+    'http://localhost:3001',
+    'https://admin.nextdot.kr',
+    'https://shm-api.nextdot.kr',
+  ];
 
   app.enableCors({
     origin: (
