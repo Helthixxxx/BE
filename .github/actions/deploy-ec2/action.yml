@@ -165,29 +165,6 @@ runs:
         IMAGE_URI: ${{ inputs.image-uri }}
         AWS_REGION: ${{ inputs.aws-region }}
         AWS_ACCOUNT_ID: ${{ inputs.aws-account-id }}
-        # Database 환경변수
-        DB_HOST: ${{ secrets.DB_HOST }}
-        DB_PORT: ${{ secrets.DB_PORT }}
-        DB_USERNAME: ${{ secrets.DB_USERNAME }}
-        DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-        DB_NAME: ${{ secrets.DB_NAME }}
-        DB_SYNCHRONIZE: ${{ secrets.DB_SYNCHRONIZE }}
-        DB_LOGGING: ${{ secrets.DB_LOGGING }}
-        # HTTP Client 환경변수
-        HTTP_TIMEOUT_MS: ${{ secrets.HTTP_TIMEOUT_MS }}
-        HTTP_MAX_REDIRECTS: ${{ secrets.HTTP_MAX_REDIRECTS }}
-        # Health 환경변수
-        HEALTH_DEGRADED_THRESHOLD_MS: ${{ secrets.HEALTH_DEGRADED_THRESHOLD_MS }}
-        HEALTH_GRACE_PERIOD_MS: ${{ secrets.HEALTH_GRACE_PERIOD_MS }}
-        # Server 환경변수
-        PORT: ${{ secrets.PORT }}
-        SWAGGER_URL: ${{ secrets.SWAGGER_URL }}
-        # JWT 환경변수
-        JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
-        JWT_ACCESS_EXPIRES_IN: ${{ secrets.JWT_ACCESS_EXPIRES_IN }}
-        JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
-        JWT_REFRESH_EXPIRES_IN: ${{ secrets.JWT_REFRESH_EXPIRES_IN }}
-        BCRYPT_SALT_ROUNDS: ${{ secrets.BCRYPT_SALT_ROUNDS }}
       run: |
         set -euo pipefail
         : "${IMAGE_URI:?IMAGE_URI is not set}"
@@ -204,24 +181,6 @@ runs:
           "IMAGE_URI='${IMAGE_URI}' \
            AWS_REGION='${AWS_REGION}' \
            AWS_ACCOUNT_ID='${AWS_ACCOUNT_ID}' \
-           DB_HOST='${DB_HOST}' \
-           DB_PORT='${DB_PORT}' \
-           DB_USERNAME='${DB_USERNAME}' \
-           DB_PASSWORD='${DB_PASSWORD}' \
-           DB_NAME='${DB_NAME}' \
-           DB_SYNCHRONIZE='${DB_SYNCHRONIZE}' \
-           DB_LOGGING='${DB_LOGGING}' \
-           HTTP_TIMEOUT_MS='${HTTP_TIMEOUT_MS}' \
-           HTTP_MAX_REDIRECTS='${HTTP_MAX_REDIRECTS}' \
-           HEALTH_DEGRADED_THRESHOLD_MS='${HEALTH_DEGRADED_THRESHOLD_MS}' \
-           HEALTH_GRACE_PERIOD_MS='${HEALTH_GRACE_PERIOD_MS}' \
-           PORT='${PORT}' \
-           SWAGGER_URL='${SWAGGER_URL}' \
-           JWT_ACCESS_SECRET='${JWT_ACCESS_SECRET}' \
-           JWT_ACCESS_EXPIRES_IN='${JWT_ACCESS_EXPIRES_IN}' \
-           JWT_REFRESH_SECRET='${JWT_REFRESH_SECRET}' \
-           JWT_REFRESH_EXPIRES_IN='${JWT_REFRESH_EXPIRES_IN}' \
-           BCRYPT_SALT_ROUNDS='${BCRYPT_SALT_ROUNDS}' \
            bash -se" <<'EOS'
         set -euo pipefail
         : "${IMAGE_URI:?IMAGE_URI is not set}"
@@ -230,49 +189,39 @@ runs:
 
         cd ~/BE
 
+        # EC2 인스턴스의 기존 .env 파일 사용 확인
+        if [ ! -f .env ]; then
+          echo "❌ Error: .env file not found in ~/BE"
+          echo "Please create .env file on EC2 instance with required environment variables."
+          exit 1
+        fi
+
+        echo "[Info] Using existing .env file from EC2 instance"
+        echo '=== .env (masked) ==='
+        cat .env | sed 's/DB_PASSWORD=.*/DB_PASSWORD=***/' | sed 's/JWT_ACCESS_SECRET=.*/JWT_ACCESS_SECRET=***/' | sed 's/JWT_REFRESH_SECRET=.*/JWT_REFRESH_SECRET=***/' || true
+
+        # IMAGE_URI만 .env 파일에 추가/업데이트 (기존 .env 파일은 유지)
         ECR_REGISTRY="${IMAGE_URI%:*}"
         IMAGE_TAG="${IMAGE_URI##*:}"
-
-        # .env 파일 생성 (Docker Compose용)
-        {
-          echo "# Docker Compose 설정"
-          echo "ECR_REGISTRY=${ECR_REGISTRY}"
-          echo "IMAGE_TAG=${IMAGE_TAG}"
-          echo "IMAGE_URI=${IMAGE_URI}"
-          echo ""
-          echo "# Database 설정"
-          echo "DB_HOST=${DB_HOST:-localhost}"
-          echo "DB_PORT=${DB_PORT:-5432}"
-          echo "DB_USERNAME=${DB_USERNAME:-postgres}"
-          echo "DB_PASSWORD=${DB_PASSWORD}"
-          echo "DB_NAME=${DB_NAME:-shm}"
-          echo "DB_SYNCHRONIZE=${DB_SYNCHRONIZE:-false}"
-          echo "DB_LOGGING=${DB_LOGGING:-false}"
-          echo ""
-          echo "# HTTP Client 설정"
-          echo "HTTP_TIMEOUT_MS=${HTTP_TIMEOUT_MS:-30000}"
-          echo "HTTP_MAX_REDIRECTS=${HTTP_MAX_REDIRECTS:-5}"
-          echo ""
-          echo "# Health 설정"
-          echo "HEALTH_DEGRADED_THRESHOLD_MS=${HEALTH_DEGRADED_THRESHOLD_MS:-800}"
-          echo "HEALTH_GRACE_PERIOD_MS=${HEALTH_GRACE_PERIOD_MS:-120000}"
-          echo ""
-          echo "# Server 설정"
-          echo "PORT=${PORT:-3000}"
-          if [ -n "${SWAGGER_URL:-}" ]; then
-            echo "SWAGGER_URL=${SWAGGER_URL}"
-          fi
-          echo ""
-          echo "# JWT 설정"
-          echo "JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}"
-          echo "JWT_ACCESS_EXPIRES_IN=${JWT_ACCESS_EXPIRES_IN:-15m}"
-          echo "JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}"
-          echo "JWT_REFRESH_EXPIRES_IN=${JWT_REFRESH_EXPIRES_IN:-7d}"
-          echo "BCRYPT_SALT_ROUNDS=${BCRYPT_SALT_ROUNDS:-10}"
-        } > .env
-
-        echo '=== .env ==='
-        cat .env | sed 's/DB_PASSWORD=.*/DB_PASSWORD=***/' | sed 's/JWT_ACCESS_SECRET=.*/JWT_ACCESS_SECRET=***/' | sed 's/JWT_REFRESH_SECRET=.*/JWT_REFRESH_SECRET=***/'  # 비밀번호와 시크릿은 마스킹하여 출력
+        
+        # .env 파일에 IMAGE_URI 관련 변수 추가/업데이트 (Linux sed 사용)
+        if grep -q "^IMAGE_URI=" .env; then
+          sed -i "s|^IMAGE_URI=.*|IMAGE_URI=${IMAGE_URI}|" .env
+        else
+          echo "IMAGE_URI=${IMAGE_URI}" >> .env
+        fi
+        
+        if grep -q "^ECR_REGISTRY=" .env; then
+          sed -i "s|^ECR_REGISTRY=.*|ECR_REGISTRY=${ECR_REGISTRY}|" .env
+        else
+          echo "ECR_REGISTRY=${ECR_REGISTRY}" >> .env
+        fi
+        
+        if grep -q "^IMAGE_TAG=" .env; then
+          sed -i "s|^IMAGE_TAG=.*|IMAGE_TAG=${IMAGE_TAG}|" .env
+        else
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> .env
+        fi
 
         aws ecr get-login-password --region "${AWS_REGION}" \
           | sudo docker login --username AWS --password-stdin \
