@@ -16,6 +16,13 @@ COPY . .
 RUN npm run build && \
     echo "Build completed. Checking dist directory..." && \
     ls -la /app/dist && \
+    echo "Checking dist/src directory..." && \
+    if [ -d /app/dist/src ]; then \
+        echo "Moving dist/src/* to dist/..." && \
+        mv /app/dist/src/* /app/dist/ && \
+        rmdir /app/dist/src && \
+        echo "Files moved successfully"; \
+    fi && \
     echo "Checking for main.js..." && \
     test -f /app/dist/main.js || (echo "Error: dist/main.js not found after build" && ls -la /app/dist && exit 1) && \
     echo "Build verification successful"
