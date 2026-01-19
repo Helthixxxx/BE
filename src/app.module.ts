@@ -12,6 +12,7 @@ import databaseConfig from './config/database.config';
 import httpConfig from './config/http.config';
 import jwtConfig from './config/jwt.config';
 import healthConfig from './config/health.config';
+import { HealthController } from './health.controller';
 
 /**
  * AppModule
@@ -52,5 +53,6 @@ import healthConfig from './config/health.config';
     // 스케줄러 모듈
     SchedulerModule,
   ],
+  controllers: [HealthController],
 })
 export class AppModule {}
