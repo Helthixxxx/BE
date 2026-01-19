@@ -229,23 +229,31 @@ runs:
 
         sudo docker compose pull
         sudo docker compose up -d --remove-orphans
+        
+        echo "[Check] Waiting for container to be ready (10s)..."
+        sleep 10
+        
+        echo "[Check] Container status:"
         sudo docker compose ps
 
-        echo "[Check] Waiting for application to start (5s)..."
-        sleep 5
-
-        for i in $(seq 1 20); do
-          if curl -fsS --max-time 5 http://localhost:3000/health >/dev/null 2>&1; then
-            echo "[Check] localhost health OK (attempt ${i}/20)"
+        for i in $(seq 1 30); do
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:3000/health 2>&1 || echo "000")
+          if [ "${HTTP_CODE}" = "200" ]; then
+            echo "[Check] localhost health OK (attempt ${i}/30, HTTP ${HTTP_CODE})"
             exit 0
           fi
-          echo "[Check] localhost health retry ${i}/20 (waiting 3s...)"
+          echo "[Check] localhost health retry ${i}/30 (HTTP ${HTTP_CODE}, waiting 3s...)"
           sleep 3
         done
 
-        echo "[Check] localhost health FAILED after 20 attempts"
+        echo "[Check] localhost health FAILED after 30 attempts"
+        echo "[Check] Testing connectivity:"
+        curl -v --max-time 5 http://localhost:3000/health || true
+        echo ""
         echo "[Check] Container status:"
         sudo docker compose ps
+        echo "[Check] Container health:"
+        sudo docker inspect shm --format='{{json .State.Health}}' 2>/dev/null || echo "No health check configured"
         echo "[Check] Recent logs:"
         sudo docker compose logs --tail=200
         exit 1
