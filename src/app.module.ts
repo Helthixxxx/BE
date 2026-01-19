@@ -23,12 +23,9 @@ import healthConfig from './config/health.config';
     ConfigModule.forRoot({
       isGlobal: true,
       load: [databaseConfig, httpConfig, jwtConfig, healthConfig],
-      envFilePath: [
-        `.env.${process.env.NODE_ENV || 'local'}`,
-        '.env',
-      ],
+      envFilePath: [`.env.${process.env.NODE_ENV || 'local'}`, '.env'],
     }),
-    // TypeORM: 데이터베이스 연결 
+    // TypeORM: 데이터베이스 연결
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {

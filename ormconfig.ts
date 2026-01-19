@@ -18,4 +18,12 @@ export default new DataSource({
   migrations: ['src/migrations/*{.ts,.js}'],
   synchronize: false,
   logging: true,
+  // SSL 설정: AWS RDS는 기본적으로 SSL을 지원하므로 활성화
+  // 로컬 개발 환경(DB_HOST가 localhost인 경우)이 아닐 때만 SSL 사용
+  ssl:
+    process.env.DB_HOST && process.env.DB_HOST !== 'localhost'
+      ? {
+          rejectUnauthorized: false, // RDS 자체 서명 인증서 사용
+        }
+      : false,
 });
