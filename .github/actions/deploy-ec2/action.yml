@@ -165,6 +165,29 @@ runs:
         IMAGE_URI: ${{ inputs.image-uri }}
         AWS_REGION: ${{ inputs.aws-region }}
         AWS_ACCOUNT_ID: ${{ inputs.aws-account-id }}
+        # Database 환경변수
+        DB_HOST: ${{ secrets.DB_HOST }}
+        DB_PORT: ${{ secrets.DB_PORT }}
+        DB_USERNAME: ${{ secrets.DB_USERNAME }}
+        DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        DB_NAME: ${{ secrets.DB_NAME }}
+        DB_SYNCHRONIZE: ${{ secrets.DB_SYNCHRONIZE }}
+        DB_LOGGING: ${{ secrets.DB_LOGGING }}
+        # HTTP Client 환경변수
+        HTTP_TIMEOUT_MS: ${{ secrets.HTTP_TIMEOUT_MS }}
+        HTTP_MAX_REDIRECTS: ${{ secrets.HTTP_MAX_REDIRECTS }}
+        # Health 환경변수
+        HEALTH_DEGRADED_THRESHOLD_MS: ${{ secrets.HEALTH_DEGRADED_THRESHOLD_MS }}
+        HEALTH_GRACE_PERIOD_MS: ${{ secrets.HEALTH_GRACE_PERIOD_MS }}
+        # Server 환경변수
+        PORT: ${{ secrets.PORT }}
+        SWAGGER_URL: ${{ secrets.SWAGGER_URL }}
+        # JWT 환경변수
+        JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
+        JWT_ACCESS_EXPIRES_IN: ${{ secrets.JWT_ACCESS_EXPIRES_IN }}
+        JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+        JWT_REFRESH_EXPIRES_IN: ${{ secrets.JWT_REFRESH_EXPIRES_IN }}
+        BCRYPT_SALT_ROUNDS: ${{ secrets.BCRYPT_SALT_ROUNDS }}
       run: |
         set -euo pipefail
         : "${IMAGE_URI:?IMAGE_URI is not set}"
@@ -178,7 +201,28 @@ runs:
           -o ServerAliveCountMax=10 \
           -o ConnectTimeout=10 \
           ubuntu@"${EC2_HOST}" \
-          "IMAGE_URI='${IMAGE_URI}' AWS_REGION='${AWS_REGION}' AWS_ACCOUNT_ID='${AWS_ACCOUNT_ID}' bash -se" <<'EOS'
+          "IMAGE_URI='${IMAGE_URI}' \
+           AWS_REGION='${AWS_REGION}' \
+           AWS_ACCOUNT_ID='${AWS_ACCOUNT_ID}' \
+           DB_HOST='${DB_HOST}' \
+           DB_PORT='${DB_PORT}' \
+           DB_USERNAME='${DB_USERNAME}' \
+           DB_PASSWORD='${DB_PASSWORD}' \
+           DB_NAME='${DB_NAME}' \
+           DB_SYNCHRONIZE='${DB_SYNCHRONIZE}' \
+           DB_LOGGING='${DB_LOGGING}' \
+           HTTP_TIMEOUT_MS='${HTTP_TIMEOUT_MS}' \
+           HTTP_MAX_REDIRECTS='${HTTP_MAX_REDIRECTS}' \
+           HEALTH_DEGRADED_THRESHOLD_MS='${HEALTH_DEGRADED_THRESHOLD_MS}' \
+           HEALTH_GRACE_PERIOD_MS='${HEALTH_GRACE_PERIOD_MS}' \
+           PORT='${PORT}' \
+           SWAGGER_URL='${SWAGGER_URL}' \
+           JWT_ACCESS_SECRET='${JWT_ACCESS_SECRET}' \
+           JWT_ACCESS_EXPIRES_IN='${JWT_ACCESS_EXPIRES_IN}' \
+           JWT_REFRESH_SECRET='${JWT_REFRESH_SECRET}' \
+           JWT_REFRESH_EXPIRES_IN='${JWT_REFRESH_EXPIRES_IN}' \
+           BCRYPT_SALT_ROUNDS='${BCRYPT_SALT_ROUNDS}' \
+           bash -se" <<'EOS'
         set -euo pipefail
         : "${IMAGE_URI:?IMAGE_URI is not set}"
         : "${AWS_REGION:?AWS_REGION is not set}"
@@ -189,11 +233,46 @@ runs:
         ECR_REGISTRY="${IMAGE_URI%:*}"
         IMAGE_TAG="${IMAGE_URI##*:}"
 
-        printf "ECR_REGISTRY=%s\nIMAGE_TAG=%s\nIMAGE_URI=%s\n" \
-          "${ECR_REGISTRY}" "${IMAGE_TAG}" "${IMAGE_URI}" > .env
+        # .env 파일 생성 (Docker Compose용)
+        {
+          echo "# Docker Compose 설정"
+          echo "ECR_REGISTRY=${ECR_REGISTRY}"
+          echo "IMAGE_TAG=${IMAGE_TAG}"
+          echo "IMAGE_URI=${IMAGE_URI}"
+          echo ""
+          echo "# Database 설정"
+          echo "DB_HOST=${DB_HOST:-localhost}"
+          echo "DB_PORT=${DB_PORT:-5432}"
+          echo "DB_USERNAME=${DB_USERNAME:-postgres}"
+          echo "DB_PASSWORD=${DB_PASSWORD}"
+          echo "DB_NAME=${DB_NAME:-shm}"
+          echo "DB_SYNCHRONIZE=${DB_SYNCHRONIZE:-false}"
+          echo "DB_LOGGING=${DB_LOGGING:-false}"
+          echo ""
+          echo "# HTTP Client 설정"
+          echo "HTTP_TIMEOUT_MS=${HTTP_TIMEOUT_MS:-30000}"
+          echo "HTTP_MAX_REDIRECTS=${HTTP_MAX_REDIRECTS:-5}"
+          echo ""
+          echo "# Health 설정"
+          echo "HEALTH_DEGRADED_THRESHOLD_MS=${HEALTH_DEGRADED_THRESHOLD_MS:-800}"
+          echo "HEALTH_GRACE_PERIOD_MS=${HEALTH_GRACE_PERIOD_MS:-120000}"
+          echo ""
+          echo "# Server 설정"
+          echo "PORT=${PORT:-3000}"
+          if [ -n "${SWAGGER_URL:-}" ]; then
+            echo "SWAGGER_URL=${SWAGGER_URL}"
+          fi
+          echo ""
+          echo "# JWT 설정"
+          echo "JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}"
+          echo "JWT_ACCESS_EXPIRES_IN=${JWT_ACCESS_EXPIRES_IN:-15m}"
+          echo "JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}"
+          echo "JWT_REFRESH_EXPIRES_IN=${JWT_REFRESH_EXPIRES_IN:-7d}"
+          echo "BCRYPT_SALT_ROUNDS=${BCRYPT_SALT_ROUNDS:-10}"
+        } > .env
 
         echo '=== .env ==='
-        cat .env
+        cat .env | sed 's/DB_PASSWORD=.*/DB_PASSWORD=***/' | sed 's/JWT_ACCESS_SECRET=.*/JWT_ACCESS_SECRET=***/' | sed 's/JWT_REFRESH_SECRET=.*/JWT_REFRESH_SECRET=***/'  # 비밀번호와 시크릿은 마스킹하여 출력
 
         aws ecr get-login-password --region "${AWS_REGION}" \
           | sudo docker login --username AWS --password-stdin \
