@@ -223,6 +223,19 @@ runs:
           echo "IMAGE_TAG=${IMAGE_TAG}" >> .env
         fi
 
+        # 디스크 공간 정리: 사용하지 않는 Docker 이미지, 컨테이너, 볼륨 정리
+        echo "[Cleanup] Cleaning up unused Docker resources to free disk space..."
+        sudo docker system df
+        sudo docker image prune -a -f
+        sudo docker container prune -f
+        sudo docker volume prune -f
+        sudo docker builder prune -a -f
+        sudo docker system prune -a -f --volumes
+        
+        # 디스크 사용량 확인
+        echo "[Info] Disk usage after cleanup:"
+        df -h / | tail -1
+        
         aws ecr get-login-password --region "${AWS_REGION}" \
           | sudo docker login --username AWS --password-stdin \
             "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
