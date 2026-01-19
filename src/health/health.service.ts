@@ -35,19 +35,6 @@ export class HealthService {
   }
 
   /**
-   * 사용자별 Job의 Health 상태 계산 (User용 - 본인 Job만 접근 가능)
-   * @param jobId Job ID
-   * @param userId 사용자 ID
-   */
-  async calculateHealthByUserId(
-    jobId: string,
-    userId: string,
-  ): Promise<Health> {
-    const job = await this.jobsService.findOneByUserId(jobId, userId);
-    return this.calculateHealthInternal(job);
-  }
-
-  /**
    * Health 상태 계산 내부 로직
    */
   private async calculateHealthInternal(job: {

@@ -58,16 +58,6 @@ export class Job {
   })
   lastHealth: Health | null;
 
-  /**
-   * Job 소유자 ID (nullable)
-   * Job 생성 시 현재 사용자 ID 저장
-   * User는 본인이 생성한 Job만 접근 가능
-   * Admin은 모든 Job에 접근 가능
-   */
-  @Column({ type: 'uuid', nullable: true, name: 'user_id' })
-  @Index(['userId'])
-  userId: string | null;
-
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

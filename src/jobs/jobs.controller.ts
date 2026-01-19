@@ -162,8 +162,7 @@ export class JobsController {
     },
   })
   async create(@Body() createJobDto: CreateJobDto) {
-    // Admin은 userId를 null로 설정 (모든 Admin이 접근 가능)
-    return await this.jobsService.create(createJobDto, null);
+    return await this.jobsService.create(createJobDto);
   }
 
   @Get()

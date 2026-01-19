@@ -107,25 +107,6 @@ export class ExecutionsService {
   }
 
   /**
-   * 사용자별 Job의 Execution 목록 조회 (User용 - 본인 Job만 접근 가능)
-   * @param jobId Job ID
-   * @param userId 사용자 ID
-   * @param limit 페이지 크기
-   * @param cursor 커서
-   */
-  async findByJobIdAndUserId(
-    jobId: string,
-    userId: string,
-    limit: number = 20,
-    cursor?: string,
-  ): Promise<ExecutionListResponseDto> {
-    // Job이 사용자 소유인지 확인
-    await this.jobsService.findOneByUserId(jobId, userId);
-
-    return this.findByJobIdInternal(jobId, limit, cursor);
-  }
-
-  /**
    * Execution 목록 조회 내부 로직
    */
   private async findByJobIdInternal(

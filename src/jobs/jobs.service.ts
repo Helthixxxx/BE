@@ -21,12 +21,8 @@ export class JobsService {
    * Job 생성
    * 활성화된 Job의 경우 nextRunAt을 자동으로 설정
    * @param createJobDto Job 생성 데이터
-   * @param userId Job 소유자 ID (선택적, Admin은 null 가능)
    */
-  async create(
-    createJobDto: CreateJobDto,
-    userId?: string | null,
-  ): Promise<Job> {
+  async create(createJobDto: CreateJobDto): Promise<Job> {
     const isActive = createJobDto.isActive ?? true;
     // 활성화된 Job의 경우 nextRunAt 자동 설정
     const nextRunAt = isActive
@@ -36,7 +32,6 @@ export class JobsService {
     const job = this.jobRepository.create({
       ...createJobDto,
       isActive,
-      userId: userId || null,
       nextRunAt,
       lastHealth: null,
     });
@@ -63,29 +58,7 @@ export class JobsService {
   }
 
   /**
-   * 사용자별 Job 조회 (User용)
-   * @param userId 사용자 ID
-   * @param includeHealth Health 포함 여부
-   */
-  async findByUserId(
-    userId: string,
-    includeHealth: boolean = false,
-  ): Promise<Job[]> {
-    const jobs = await this.jobRepository.find({
-      where: { userId },
-      order: { createdAt: 'DESC' },
-    });
-
-    if (includeHealth) {
-      // Health는 실시간 계산이므로 별도 로직 필요
-      return jobs;
-    }
-
-    return jobs;
-  }
-
-  /**
-   * Job 단건 조회 (Admin용 - 모든 Job 접근 가능)
+   * Job 단건 조회
    */
   async findOne(id: string): Promise<Job> {
     const job = await this.jobRepository.findOne({ where: { id } });
@@ -98,24 +71,7 @@ export class JobsService {
   }
 
   /**
-   * 사용자별 Job 단건 조회 (User용 - 본인 Job만 접근 가능)
-   * @param id Job ID
-   * @param userId 사용자 ID
-   */
-  async findOneByUserId(id: string, userId: string): Promise<Job> {
-    const job = await this.jobRepository.findOne({
-      where: { id, userId },
-    });
-
-    if (!job) {
-      throw new NotFoundException(`Job with ID ${id} not found`);
-    }
-
-    return job;
-  }
-
-  /**
-   * Job 수정 (Admin용)
+   * Job 수정
    */
   async update(id: string, updateJobDto: UpdateJobDto): Promise<Job> {
     const job = await this.findOne(id);
@@ -143,55 +99,10 @@ export class JobsService {
   }
 
   /**
-   * 사용자별 Job 수정 (User용 - 본인 Job만 수정 가능)
-   * @param id Job ID
-   * @param updateJobDto 수정 데이터
-   * @param userId 사용자 ID
-   */
-  async updateByUserId(
-    id: string,
-    updateJobDto: UpdateJobDto,
-    userId: string,
-  ): Promise<Job> {
-    const job = await this.findOneByUserId(id, userId);
-    const previousIsActive = job.isActive;
-    const previousScheduleMinutes = job.scheduleMinutes;
-
-    Object.assign(job, updateJobDto);
-
-    // isActive가 false에서 true로 변경되거나, scheduleMinutes가 변경된 경우 nextRunAt 업데이트
-    const isActivated = !previousIsActive && job.isActive;
-    const scheduleChanged =
-      updateJobDto.scheduleMinutes !== undefined &&
-      updateJobDto.scheduleMinutes !== previousScheduleMinutes;
-
-    if (isActivated || (scheduleChanged && job.isActive)) {
-      // 활성화되거나 스케줄이 변경된 경우 nextRunAt 재설정
-      const now = new Date();
-      job.nextRunAt = this.calculateNextRunAt(now, job.scheduleMinutes);
-    } else if (updateJobDto.isActive === false && job.isActive === false) {
-      // 비활성화된 경우 nextRunAt을 null로 설정
-      job.nextRunAt = null;
-    }
-
-    return await this.jobRepository.save(job);
-  }
-
-  /**
-   * Job 삭제 (Admin용)
+   * Job 삭제
    */
   async remove(id: string): Promise<void> {
     const job = await this.findOne(id);
-    await this.jobRepository.remove(job);
-  }
-
-  /**
-   * 사용자별 Job 삭제 (User용 - 본인 Job만 삭제 가능)
-   * @param id Job ID
-   * @param userId 사용자 ID
-   */
-  async removeByUserId(id: string, userId: string): Promise<void> {
-    const job = await this.findOneByUserId(id, userId);
     await this.jobRepository.remove(job);
   }
 
