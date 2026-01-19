@@ -6,6 +6,7 @@ import {
   HttpStatus,
   UnauthorizedException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
@@ -34,6 +35,8 @@ interface HttpExceptionResponse {
  */
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(GlobalExceptionFilter.name);
+
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
@@ -114,7 +117,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       message = exception.message;
     }
 
-    response.status(status).json({
+    // 에러 상세 로깅
+    this.logError(request, exception, status, errorCode, message, details);
+
+    const errorResponse = {
       meta: {
         requestId,
         timestamp: new Date().toISOString(),
@@ -124,7 +130,117 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         message,
         ...(details && { details }),
       },
-    });
+    };
+
+    response.status(status).json(errorResponse);
+  }
+
+  /**
+   * 에러 상세 로깅
+   */
+  private logError(
+    request: RequestWithId,
+    exception: unknown,
+    status: number,
+    errorCode: string,
+    message: string,
+    details?: Record<string, string[]>,
+  ): void {
+    const method = request.method;
+    const url = request.url;
+    const headers = request.headers as Record<string, unknown>;
+    const query = request.query as Record<string, unknown>;
+    const body = request.body as unknown;
+    const requestId = request.requestId || 'unknown';
+
+    // 민감한 정보 마스킹
+    const maskedHeaders = this.maskSensitiveHeaders(headers);
+    const maskedBody = this.maskSensitiveFields(body);
+
+    const errorLog = {
+      type: 'EXCEPTION',
+      requestId,
+      method,
+      url,
+      statusCode: status,
+      errorCode,
+      message,
+      ...(details && { details }),
+      request: {
+        headers: maskedHeaders,
+        query: Object.keys(query).length > 0 ? query : undefined,
+        body: maskedBody,
+      },
+      exception: {
+        name: exception instanceof Error ? exception.name : 'Unknown',
+        message:
+          exception instanceof Error ? exception.message : String(exception),
+        stack: exception instanceof Error ? exception.stack : undefined,
+      },
+      timestamp: new Date().toISOString(),
+    };
+
+    // 500 에러는 error 레벨로, 그 외는 warn 레벨로 로깅
+    if (status >= 500) {
+      this.logger.error(JSON.stringify(errorLog, null, 2));
+    } else {
+      this.logger.warn(JSON.stringify(errorLog, null, 2));
+    }
+  }
+
+  /**
+   * 민감한 헤더 마스킹
+   */
+  private maskSensitiveHeaders(
+    headers: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const sensitiveHeaders = ['authorization', 'cookie', 'x-api-key'];
+    const masked: Record<string, unknown> = { ...headers };
+
+    for (const key of Object.keys(masked)) {
+      if (sensitiveHeaders.includes(key.toLowerCase())) {
+        masked[key] = '***';
+      }
+    }
+
+    return masked;
+  }
+
+  /**
+   * 민감한 필드 마스킹
+   */
+  private maskSensitiveFields(data: unknown): unknown {
+    if (!data || typeof data !== 'object') {
+      return data;
+    }
+
+    if (Array.isArray(data)) {
+      return data.map((item) => this.maskSensitiveFields(item));
+    }
+
+    const sensitiveFields = [
+      'password',
+      'token',
+      'accessToken',
+      'refreshToken',
+      'secret',
+      'apiKey',
+      'authorization',
+    ];
+
+    const masked: Record<string, unknown> = {
+      ...(data as Record<string, unknown>),
+    };
+
+    for (const key of Object.keys(masked)) {
+      if (sensitiveFields.includes(key.toLowerCase())) {
+        masked[key] = '***';
+      } else if (typeof masked[key] === 'object' && masked[key] !== null) {
+        masked[key] = this.maskSensitiveFields(masked[key]);
+      }
+    }
+
+    return masked;
   }
 
   /**
