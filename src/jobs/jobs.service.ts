@@ -20,23 +20,32 @@ export class JobsService {
   /**
    * Job 생성
    * 활성화된 Job의 경우 nextRunAt을 자동으로 설정
+   * 생성일시(createdAt)로부터 정확히 스케줄 시간을 더함
    * @param createJobDto Job 생성 데이터
    */
   async create(createJobDto: CreateJobDto): Promise<Job> {
     const isActive = createJobDto.isActive ?? true;
-    // 활성화된 Job의 경우 nextRunAt 자동 설정
-    const nextRunAt = isActive
-      ? this.calculateNextRunAt(new Date(), createJobDto.scheduleMinutes)
-      : null;
 
     const job = this.jobRepository.create({
       ...createJobDto,
       isActive,
-      nextRunAt,
+      nextRunAt: null, // 일단 null로 설정, 저장 후 createdAt 기준으로 계산
       lastHealth: null,
     });
 
-    return await this.jobRepository.save(job);
+    const savedJob = await this.jobRepository.save(job);
+
+    // 저장 후 createdAt이 설정되므로, 이를 기준으로 nextRunAt 계산
+    if (isActive && savedJob.createdAt) {
+      const nextRunAt = this.calculateNextRunAt(
+        savedJob.createdAt,
+        savedJob.scheduleMinutes,
+      );
+      savedJob.nextRunAt = nextRunAt;
+      return await this.jobRepository.save(savedJob);
+    }
+
+    return savedJob;
   }
 
   /**
@@ -88,8 +97,9 @@ export class JobsService {
 
     if (isActivated || (scheduleChanged && job.isActive)) {
       // 활성화되거나 스케줄이 변경된 경우 nextRunAt 재설정
-      const now = new Date();
-      job.nextRunAt = this.calculateNextRunAt(now, job.scheduleMinutes);
+      // 생성일시(createdAt)를 기준으로 계산
+      const baseTime = job.createdAt || new Date();
+      job.nextRunAt = this.calculateNextRunAt(baseTime, job.scheduleMinutes);
     } else if (updateJobDto.isActive === false && job.isActive === false) {
       // 비활성화된 경우 nextRunAt을 null로 설정
       job.nextRunAt = null;
@@ -132,12 +142,13 @@ export class JobsService {
 
   /**
    * 다음 실행 시간 계산
-   * scheduleMinutes 기준으로 분 단위 정렬
+   * baseTime으로부터 정확히 scheduleMinutes를 더함 (초와 밀리초 유지)
+   * 예: 1시23분12초 + 5분 = 1시28분12초
    */
   private calculateNextRunAt(baseTime: Date, scheduleMinutes: number): Date {
     const next = new Date(baseTime);
     next.setMinutes(next.getMinutes() + scheduleMinutes);
-    next.setSeconds(0, 0); // 초와 밀리초는 0으로 설정
+    // 초와 밀리초는 유지 (정확한 시간 계산)
     return next;
   }
 }
