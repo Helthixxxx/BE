@@ -13,7 +13,12 @@ RUN npm ci --only=production=false
 COPY . .
 
 # 빌드 실행
-RUN npm run build
+RUN npm run build && \
+    echo "Build completed. Checking dist directory..." && \
+    ls -la /app/dist && \
+    echo "Checking for main.js..." && \
+    test -f /app/dist/main.js || (echo "Error: dist/main.js not found after build" && ls -la /app/dist && exit 1) && \
+    echo "Build verification successful"
 
 # Stage 2: Runtime
 FROM node:20-alpine AS runtime
@@ -28,6 +33,10 @@ RUN npm ci --only=production && npm cache clean --force
 
 # builder 스테이지에서 빌드된 파일 복사
 COPY --from=builder /app/dist ./dist
+
+# 복사된 파일 확인
+RUN ls -la /app/dist && \
+    test -f /app/dist/main.js || (echo "Error: dist/main.js not found after copy" && exit 1)
 
 # 비root 사용자로 실행 (보안 강화)
 RUN addgroup -g 1001 -S nodejs && \

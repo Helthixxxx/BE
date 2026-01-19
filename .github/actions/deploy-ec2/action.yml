@@ -36,10 +36,7 @@ runs:
 
     - name: Get Github Actions IP
       id: ip
-      shell: bash
-      run: |
-        IPV4=$(curl -s https://api.ipify.org || curl -s https://ifconfig.me || curl -s https://icanhazip.com)
-        echo "ipv4=${IPV4}" >> "$GITHUB_OUTPUT"
+      uses: haythem/public-ip@v1.2
 
     - name: Add Github Actions IP to security group
       shell: bash
