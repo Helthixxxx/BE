@@ -131,8 +131,6 @@ async function bootstrap() {
     .addTag('auth', '인증 API')
     .addTag('jobs', 'Job 관리 API (User)')
     .addTag('executions', 'Execution 조회 API (User)')
-    .addTag('health', 'Health 상태 조회 API (User)')
-    .addTag('admin', '관리자 API (Admin)')
     .addBearerAuth(
       {
         type: 'http',

@@ -50,7 +50,7 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new ConflictException('이미 사용 중인 providerId입니다.');
+      throw new ConflictException('이미 사용 중인 아이디입니다.');
     }
 
     // 비밀번호 해시

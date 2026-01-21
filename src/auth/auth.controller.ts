@@ -103,7 +103,7 @@ export class AuthController {
       },
       error: {
         code: 'HTTP_ERROR',
-        message: '이미 사용 중인 providerId입니다.',
+        message: '이미 사용 중인 아이디입니다.',
       },
     },
   })
