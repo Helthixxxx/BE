@@ -129,8 +129,8 @@ async function bootstrap() {
     .setDescription('서비스 헬스 모니터링 시스템 API 문서')
     .setVersion('1.0')
     .addTag('auth', '인증 API')
-    .addTag('jobs', 'Job 관리 API (User)')
-    .addTag('executions', 'Execution 조회 API (User)')
+    .addTag('jobs', 'Job 관리 API')
+    .addTag('executions', 'Execution 조회 API')
     .addBearerAuth(
       {
         type: 'http',
