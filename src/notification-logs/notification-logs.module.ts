@@ -1,7 +1,7 @@
-import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { NotificationLogsService } from './notification-logs.service';
-import { NotificationLog } from './entities/notification-log.entity';
+import { Module } from "@nestjs/common";
+import { TypeOrmModule } from "@nestjs/typeorm";
+import { NotificationLogsService } from "./notification-logs.service";
+import { NotificationLog } from "./entities/notification-log.entity";
 
 /**
  * NotificationLogsModule

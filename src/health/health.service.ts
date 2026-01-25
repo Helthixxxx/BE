@@ -1,10 +1,11 @@
-import { Injectable, Inject, forwardRef } from '@nestjs/common';
-import { ConfigType } from '@nestjs/config';
-import { JobsService } from '../jobs/jobs.service';
-import { ExecutionsService } from '../executions/executions.service';
-import { NotificationLogsService } from '../notification-logs/notification-logs.service';
-import { Health } from '../common/enums/health.enum';
-import healthConfig from '../config/health.config';
+import { Injectable, Inject, forwardRef, Logger } from "@nestjs/common";
+import { ConfigType } from "@nestjs/config";
+import { JobsService } from "../jobs/jobs.service";
+import { ExecutionsService } from "../executions/executions.service";
+import { NotificationLogsService } from "../notification-logs/notification-logs.service";
+import { NotificationsService } from "../notifications/notifications.service";
+import { Health } from "../common/enums/health.enum";
+import healthConfig from "../config/health.config";
 
 /**
  * HealthService
@@ -13,11 +14,18 @@ import healthConfig from '../config/health.config';
  */
 @Injectable()
 export class HealthService {
+  private readonly logger = new Logger(HealthService.name);
+
+  // 쿨다운 시간 (밀리초)
+  private readonly COOLDOWN_FAILED_MS = 30 * 60 * 1000; // 30분
+  private readonly COOLDOWN_RECOVERY_MS = 60 * 60 * 1000; // 1시간
+
   constructor(
     @Inject(forwardRef(() => JobsService))
     private readonly jobsService: JobsService,
     private readonly executionsService: ExecutionsService,
     private readonly notificationLogsService: NotificationLogsService,
+    private readonly notificationsService: NotificationsService,
     @Inject(healthConfig.KEY)
     private readonly healthConfiguration: ConfigType<typeof healthConfig>,
   ) {}
@@ -45,10 +53,7 @@ export class HealthService {
     const now = new Date();
 
     // 최근 Execution 10개 조회
-    const recentExecutions = await this.executionsService.findRecentByJobId(
-      jobId,
-      10,
-    );
+    const recentExecutions = await this.executionsService.findRecentByJobId(jobId, 10);
 
     // Execution이 없으면 NORMAL (아직 실행되지 않음)
     if (recentExecutions.length === 0) {
@@ -77,18 +82,14 @@ export class HealthService {
     // 2) DEGRADED 체크 (응답 지연/성능 저하만)
     // 성공한 execution만 사용하여 평균 계산
     const successfulExecutions = recentExecutions.filter(
-      (exec) =>
-        exec.finishedAt !== null &&
-        exec.durationMs !== null &&
-        exec.success === true,
+      (exec) => exec.finishedAt !== null && exec.durationMs !== null && exec.success === true,
     );
 
     if (successfulExecutions.length >= 10) {
       // 최근 성공한 10개 평균 계산
       const recentAvg =
-        successfulExecutions
-          .slice(0, 10)
-          .reduce((sum, exec) => sum + (exec.durationMs || 0), 0) / 10;
+        successfulExecutions.slice(0, 10).reduce((sum, exec) => sum + (exec.durationMs || 0), 0) /
+        10;
 
       // 절대 임계값 체크: 최근 평균이 임계값을 초과하면 DEGRADED
       if (recentAvg >= this.healthConfiguration.degradedThresholdMs) {
@@ -97,26 +98,17 @@ export class HealthService {
 
       // 상대적 성능 저하 체크: 최근 10개 평균 vs 이전 10개 평균 비교
       // 이전 10개 조회 (11~20번째)
-      const olderExecutions = await this.executionsService.findRecentByJobId(
-        jobId,
-        20,
-      );
+      const olderExecutions = await this.executionsService.findRecentByJobId(jobId, 20);
       const olderSuccessful = olderExecutions
         .slice(10, 20)
         .filter(
-          (exec) =>
-            exec.finishedAt !== null &&
-            exec.durationMs !== null &&
-            exec.success === true,
+          (exec) => exec.finishedAt !== null && exec.durationMs !== null && exec.success === true,
         );
 
       // 이전 성공한 10개가 모두 있으면 비교
       if (olderSuccessful.length >= 10) {
         const olderAvg =
-          olderSuccessful.reduce(
-            (sum, exec) => sum + (exec.durationMs || 0),
-            0,
-          ) / 10;
+          olderSuccessful.reduce((sum, exec) => sum + (exec.durationMs || 0), 0) / 10;
 
         // 최근 평균이 이전 평균보다 50% 이상 느려지면 DEGRADED (성능 저하)
         if (recentAvg >= olderAvg * 1.5) {
@@ -130,24 +122,79 @@ export class HealthService {
   }
 
   /**
-   * Job의 Health를 계산하고 상태 전이 시 NotificationLog 기록
+   * Job의 Health를 계산하고 상태 전이 시 알림 발송
    * 스케줄러에서 Execution 완료 후 호출
+   * DB Lock을 사용하여 동시성 제어 및 중복 발송 방지
    */
   async updateHealthAndNotify(jobId: string): Promise<Health> {
-    const job = await this.jobsService.findOne(jobId);
+    // DB Lock으로 동시성 제어
+    const job = await this.jobsService.findOneWithLock(jobId);
     const currentHealth = await this.calculateHealth(jobId);
     const prevHealth = job.lastHealth;
 
     // 상태 전이 감지
     if (prevHealth !== currentHealth) {
       const reason = this.getHealthChangeReason(prevHealth, currentHealth);
-      await this.notificationLogsService.create({
+
+      // 알림 발송 조건 확인
+      const shouldNotify = this.shouldSendNotification(
+        prevHealth,
+        currentHealth,
+        job.lastNotificationSentAt,
+        job.lastNotificationHealth,
+      );
+
+      // NotificationLog 먼저 생성 (알림 발송 여부와 무관)
+      const notificationLog = await this.notificationLogsService.create({
         jobId,
         prevHealth,
         nextHealth: currentHealth,
         reason,
         sentAt: new Date(),
+        notificationType: shouldNotify ? "push" : undefined,
+        status: shouldNotify ? "pending" : "skipped",
       });
+
+      if (shouldNotify) {
+        // 알림 발송
+        try {
+          const result = await this.sendNotification(
+            notificationLog.id,
+            jobId,
+            job.name,
+            prevHealth,
+            currentHealth,
+            reason,
+          );
+
+          // NotificationLog 상태 업데이트
+          const notificationStatus = result.success ? "sent" : "failed";
+          const errorMessage = result.success ? null : "알림 발송 실패";
+          await this.notificationLogsService.updateStatus(
+            notificationLog.id,
+            notificationStatus,
+            result.recipientCount,
+            errorMessage,
+          );
+        } catch (error: unknown) {
+          // 알림 발송 중 에러 발생 시 실패로 기록
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          await this.notificationLogsService.updateStatus(
+            notificationLog.id,
+            "failed",
+            0,
+            errorMessage,
+          );
+        }
+
+        // Job의 알림 정보 업데이트
+        await this.jobsService.updateNotificationInfo(jobId, new Date(), currentHealth);
+      } else {
+        // 쿨다운으로 인해 스킵
+        this.logger.debug(
+          `알림 발송 스킵 (쿨다운): Job ${jobId} (${prevHealth} → ${currentHealth})`,
+        );
+      }
 
       // Job의 lastHealth 업데이트
       await this.jobsService.updateLastHealth(jobId, currentHealth);
@@ -157,12 +204,92 @@ export class HealthService {
   }
 
   /**
-   * Health 상태 전이 이유 생성
+   * 알림 발송 여부 결정
+   * 정책:
+   * 1. NORMAL ↔ FAILED만 알림 발송
+   * 2. 쿨다운 체크 (같은 상태로 전이된 경우 일정 시간 내 재발송 방지)
    */
-  private getHealthChangeReason(
+  private shouldSendNotification(
     prevHealth: Health | null,
     nextHealth: Health,
-  ): string {
+    lastNotificationSentAt: Date | null,
+    lastNotificationHealth: Health | null,
+  ): boolean {
+    // 1. 알림 발송 대상 상태 변화인지 확인
+    const isNotificationTarget =
+      (prevHealth === Health.NORMAL && nextHealth === Health.FAILED) ||
+      (prevHealth === Health.DEGRADED && nextHealth === Health.FAILED) ||
+      (prevHealth === Health.FAILED && nextHealth === Health.NORMAL);
+
+    if (!isNotificationTarget) {
+      return false;
+    }
+
+    // 2. 쿨다운 체크
+    if (lastNotificationSentAt && lastNotificationHealth === nextHealth) {
+      const now = new Date();
+      const timeSinceLastNotification = now.getTime() - lastNotificationSentAt.getTime();
+
+      // FAILED 알림: 30분 쿨다운
+      if (nextHealth === Health.FAILED) {
+        if (timeSinceLastNotification < this.COOLDOWN_FAILED_MS) {
+          return false;
+        }
+      }
+
+      // NORMAL 복구 알림: 1시간 쿨다운
+      if (nextHealth === Health.NORMAL) {
+        if (timeSinceLastNotification < this.COOLDOWN_RECOVERY_MS) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * 알림 발송
+   */
+  private async sendNotification(
+    notificationLogId: string,
+    jobId: string,
+    jobName: string,
+    prevHealth: Health | null,
+    nextHealth: Health,
+    reason: string,
+  ): Promise<{ success: boolean; recipientCount: number }> {
+    try {
+      this.logger.log(`알림 발송 시작: Job ${jobId} (${jobName}) - ${prevHealth} → ${nextHealth}`);
+
+      const result = await this.notificationsService.sendPushNotification({
+        notificationLogId,
+        jobId,
+        jobName,
+        prevHealth: prevHealth || null,
+        nextHealth,
+        reason,
+      });
+
+      if (result.success) {
+        this.logger.log(`알림 발송 성공: Job ${jobId} - ${result.recipientCount}명에게 발송`);
+      } else {
+        this.logger.warn(`알림 발송 실패: Job ${jobId}`);
+      }
+
+      return result;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      this.logger.error(`알림 발송 중 에러: Job ${jobId} - ${errorMessage}`);
+      // 에러가 발생해도 Health 업데이트는 계속 진행
+      return { success: false, recipientCount: 0 };
+    }
+  }
+
+  /**
+   * Health 상태 전이 이유 생성
+   */
+  private getHealthChangeReason(prevHealth: Health | null, nextHealth: Health): string {
     if (prevHealth === null) {
       return `Initial health status: ${nextHealth}`;
     }
@@ -172,8 +299,7 @@ export class HealthService {
     };
 
     return (
-      reasons[`${prevHealth}_${nextHealth}`] ||
-      `Health changed from ${prevHealth} to ${nextHealth}`
+      reasons[`${prevHealth}_${nextHealth}`] || `Health changed from ${prevHealth} to ${nextHealth}`
     );
   }
 

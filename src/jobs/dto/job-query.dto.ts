@@ -1,6 +1,6 @@
-import { IsOptional, IsEnum } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Health } from '../../common/enums/health.enum';
+import { IsOptional, IsEnum } from "class-validator";
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import { Health } from "../../common/enums/health.enum";
 
 /**
  * JobQueryDto
@@ -8,7 +8,7 @@ import { Health } from '../../common/enums/health.enum';
  */
 export class JobQueryDto {
   @ApiPropertyOptional({
-    description: 'Health 상태 포함 여부',
+    description: "Health 상태 포함 여부",
     example: true,
     default: false,
   })
@@ -16,7 +16,7 @@ export class JobQueryDto {
   includeHealth?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Health 상태별 필터링 (includeHealth=true일 때만 유효)',
+    description: "Health 상태별 필터링 (includeHealth=true일 때만 유효)",
     enum: Health,
     example: Health.NORMAL,
   })

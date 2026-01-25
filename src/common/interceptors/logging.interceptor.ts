@@ -1,13 +1,7 @@
-import {
-  Injectable,
-  NestInterceptor,
-  ExecutionContext,
-  CallHandler,
-  Logger,
-} from '@nestjs/common';
-import { Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
-import { Request, Response } from 'express';
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Logger } from "@nestjs/common";
+import { Observable } from "rxjs";
+import { tap } from "rxjs/operators";
+import { Request, Response } from "express";
 
 /**
  * Request 타입 확장 (requestId 포함)
@@ -40,7 +34,7 @@ export class LoggingInterceptor implements NestInterceptor {
     const startTime = Date.now();
 
     // Health check는 간소화
-    const isHealthCheck = url === '/health';
+    const isHealthCheck = url === "/health";
 
     return next.handle().pipe(
       tap({
@@ -90,19 +84,18 @@ export class LoggingInterceptor implements NestInterceptor {
     if (queryKeys.length > 0) {
       const queryString = queryKeys
         .map((key) => `${key}=${this.formatValue(query[key])}`)
-        .join('&');
+        .join("&");
       fullUrl = `${url}?${queryString}`;
     }
 
     // 상태 코드에 따른 이모지
-    const statusEmoji =
-      statusCode >= 500 ? '❌' : statusCode >= 400 ? '⚠️' : '✅';
+    const statusEmoji = statusCode >= 500 ? "❌" : statusCode >= 400 ? "⚠️" : "✅";
 
     // 요청 정보 로깅
     let requestInfo = `${statusEmoji} ${method} ${fullUrl} | ${statusCode} | ${responseTime}ms`;
 
     // 요청 바디가 있으면 표시
-    if (body && typeof body === 'object' && Object.keys(body).length > 0) {
+    if (body && typeof body === "object" && Object.keys(body).length > 0) {
       const maskedBody = this.maskSensitiveFields(body);
       const bodyJson = JSON.stringify(maskedBody, null, 2);
       requestInfo += `\nRequest Body:\n${bodyJson}`;
@@ -132,13 +125,13 @@ export class LoggingInterceptor implements NestInterceptor {
     if (queryKeys.length > 0) {
       const queryString = queryKeys
         .map((key) => `${key}=${this.formatValue(query[key])}`)
-        .join('&');
+        .join("&");
       fullUrl = `${url}?${queryString}`;
     }
 
     // 요청 바디가 있으면 표시
     let requestInfo = `❌ ${method} ${fullUrl} | ERROR | ${responseTime}ms`;
-    if (body && typeof body === 'object' && Object.keys(body).length > 0) {
+    if (body && typeof body === "object" && Object.keys(body).length > 0) {
       const maskedBody = this.maskSensitiveFields(body);
       const bodyJson = JSON.stringify(maskedBody, null, 2);
       requestInfo += `\nRequest Body:\n${bodyJson}`;
@@ -167,12 +160,12 @@ export class LoggingInterceptor implements NestInterceptor {
    */
   private formatValue(value: unknown): string {
     if (value === null || value === undefined) {
-      return 'null';
+      return "null";
     }
-    if (typeof value === 'string') {
+    if (typeof value === "string") {
       return value;
     }
-    if (typeof value === 'number' || typeof value === 'boolean') {
+    if (typeof value === "number" || typeof value === "boolean") {
       return String(value);
     }
     return JSON.stringify(value);
@@ -182,7 +175,7 @@ export class LoggingInterceptor implements NestInterceptor {
    * 민감한 필드 마스킹
    */
   private maskSensitiveFields(data: unknown): unknown {
-    if (!data || typeof data !== 'object') {
+    if (!data || typeof data !== "object") {
       return data;
     }
 
@@ -191,15 +184,15 @@ export class LoggingInterceptor implements NestInterceptor {
     }
 
     const sensitiveFields = [
-      'password',
-      'token',
-      'accessToken',
-      'refreshToken',
-      'secret',
-      'apiKey',
-      'authorization',
-      'passwordHash',
-      'refreshTokenHash',
+      "password",
+      "token",
+      "accessToken",
+      "refreshToken",
+      "secret",
+      "apiKey",
+      "authorization",
+      "passwordHash",
+      "refreshTokenHash",
     ];
 
     const masked: Record<string, unknown> = {
@@ -208,8 +201,8 @@ export class LoggingInterceptor implements NestInterceptor {
 
     for (const key of Object.keys(masked)) {
       if (sensitiveFields.includes(key.toLowerCase())) {
-        masked[key] = '***';
-      } else if (typeof masked[key] === 'object' && masked[key] !== null) {
+        masked[key] = "***";
+      } else if (typeof masked[key] === "object" && masked[key] !== null) {
         masked[key] = this.maskSensitiveFields(masked[key]);
       }
     }

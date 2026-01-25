@@ -1,13 +1,6 @@
-import {
-  IsUUID,
-  IsEnum,
-  IsString,
-  IsNotEmpty,
-  IsDate,
-  IsOptional,
-} from 'class-validator';
-import { Health } from '../../common/enums/health.enum';
-import { Type } from 'class-transformer';
+import { IsUUID, IsEnum, IsString, IsNotEmpty, IsDate, IsOptional } from "class-validator";
+import { Health } from "../../common/enums/health.enum";
+import { Type } from "class-transformer";
 
 /**
  * CreateNotificationLogDto
@@ -32,4 +25,12 @@ export class CreateNotificationLogDto {
   @IsDate()
   @Type(() => Date)
   sentAt: Date;
+
+  @IsOptional()
+  @IsString()
+  notificationType?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
 }

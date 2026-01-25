@@ -1,7 +1,7 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
-import { JobsService } from '../jobs/jobs.service';
-import { JobExecutorService } from './job-executor.service';
+import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { Cron, CronExpression } from "@nestjs/schedule";
+import { JobsService } from "../jobs/jobs.service";
+import { JobExecutorService } from "./job-executor.service";
 
 /**
  * JobSchedulerService
@@ -21,7 +21,7 @@ export class JobSchedulerService implements OnModuleInit {
    * 모듈 초기화 시 활성 Job 로드 및 nextRunAt 설정
    */
   async onModuleInit() {
-    this.logger.log('Initializing job scheduler...');
+    this.logger.log("Initializing job scheduler...");
     await this.initializeJobs();
   }
 
@@ -37,14 +37,9 @@ export class JobSchedulerService implements OnModuleInit {
         // nextRunAt이 없으면 생성일시(createdAt) 기준으로 다음 실행 시간 설정
         const now = new Date();
         const baseTime = job.createdAt || now;
-        const nextRunAt = this.calculateNextRunAt(
-          baseTime,
-          job.scheduleMinutes,
-        );
+        const nextRunAt = this.calculateNextRunAt(baseTime, job.scheduleMinutes);
         await this.jobsService.updateNextRunAt(job.id, nextRunAt);
-        this.logger.log(
-          `Job ${job.id} (${job.name}) nextRunAt set to ${nextRunAt.toISOString()}`,
-        );
+        this.logger.log(`Job ${job.id} (${job.name}) nextRunAt set to ${nextRunAt.toISOString()}`);
       }
     }
 
@@ -65,10 +60,7 @@ export class JobSchedulerService implements OnModuleInit {
       if (!job.nextRunAt) {
         // 생성일시(createdAt)를 기준으로 계산
         const baseTime = job.createdAt || now;
-        const nextRunAt = this.calculateNextRunAt(
-          baseTime,
-          job.scheduleMinutes,
-        );
+        const nextRunAt = this.calculateNextRunAt(baseTime, job.scheduleMinutes);
         await this.jobsService.updateNextRunAt(job.id, nextRunAt);
         this.logger.log(
           `Job ${job.id} (${job.name}) nextRunAt initialized to ${nextRunAt.toISOString()}`,
@@ -83,16 +75,12 @@ export class JobSchedulerService implements OnModuleInit {
 
         // 비동기 실행 (await 하지 않음 - 병렬 처리)
         this.jobExecutorService.executeJob(job, scheduledAt).catch((error) => {
-          const errorMessage =
-            error instanceof Error ? error.message : 'Unknown error';
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
           this.logger.error(`Failed to execute job ${job.id}: ${errorMessage}`);
         });
 
         // 다음 실행 시간 계산 및 업데이트 (현재 nextRunAt 기준으로 다음 스케줄 계산)
-        const nextRunAt = this.calculateNextRunAt(
-          job.nextRunAt,
-          job.scheduleMinutes,
-        );
+        const nextRunAt = this.calculateNextRunAt(job.nextRunAt, job.scheduleMinutes);
         await this.jobsService.updateNextRunAt(job.id, nextRunAt);
       }
     }

@@ -3,25 +3,21 @@ import {
   ConflictException,
   UnauthorizedException,
   NotFoundException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { JwtService, JwtSignOptions } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
-import * as bcrypt from 'bcrypt';
-import { User, UserRole } from '../users/entities/user.entity';
-import { SignupDto } from './dto/signup.dto';
-import { LoginDto } from './dto/login.dto';
-import { RefreshDto } from './dto/refresh.dto';
-import { LogoutDto } from './dto/logout.dto';
-import {
-  AuthResponseDto,
-  RefreshResponseDto,
-  LogoutResponseDto,
-} from './dto/auth-response.dto';
-import { MeResponseDto } from './dto/me-response.dto';
-import { JwtPayload } from './strategies/jwt.strategy';
-import { bcryptConfig } from '../config/jwt.config';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { JwtService, JwtSignOptions } from "@nestjs/jwt";
+import { ConfigService } from "@nestjs/config";
+import * as bcrypt from "bcrypt";
+import { User, UserRole } from "../users/entities/user.entity";
+import { SignupDto } from "./dto/signup.dto";
+import { LoginDto } from "./dto/login.dto";
+import { RefreshDto } from "./dto/refresh.dto";
+import { LogoutDto } from "./dto/logout.dto";
+import { AuthResponseDto, RefreshResponseDto, LogoutResponseDto } from "./dto/auth-response.dto";
+import { MeResponseDto } from "./dto/me-response.dto";
+import { JwtPayload } from "./strategies/jwt.strategy";
+import { bcryptConfig } from "../config/jwt.config";
 
 /**
  * AuthService
@@ -46,11 +42,11 @@ export class AuthService {
 
     // 중복 체크: (provider='local', providerId)
     const existingUser = await this.userRepository.findOne({
-      where: { provider: 'local', providerId },
+      where: { provider: "local", providerId },
     });
 
     if (existingUser) {
-      throw new ConflictException('이미 사용 중인 아이디입니다.');
+      throw new ConflictException("이미 사용 중인 아이디입니다.");
     }
 
     // 비밀번호 해시
@@ -58,7 +54,7 @@ export class AuthService {
 
     // User 생성 (USER role 기본값)
     const user = this.userRepository.create({
-      provider: 'local',
+      provider: "local",
       providerId,
       passwordHash,
       role: UserRole.USER,
@@ -70,10 +66,7 @@ export class AuthService {
     const tokens = this.generateTokens(savedUser);
 
     // Refresh Token 해시 저장
-    const refreshTokenHash = await bcrypt.hash(
-      tokens.refreshToken,
-      bcryptConfig.saltRounds,
-    );
+    const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, bcryptConfig.saltRounds);
     savedUser.refreshTokenHash = refreshTokenHash;
     await this.userRepository.save(savedUser);
 
@@ -93,14 +86,12 @@ export class AuthService {
 
     // 사용자 조회
     const user = await this.userRepository.findOne({
-      where: { provider: 'local', providerId },
+      where: { provider: "local", providerId },
     });
 
     if (!user) {
       // 보안: 과도한 사유 노출 금지
-      throw new UnauthorizedException(
-        '아이디 또는 비밀번호가 일치하지 않습니다.',
-      );
+      throw new UnauthorizedException("아이디 또는 비밀번호가 일치하지 않습니다.");
     }
 
     // 비밀번호 검증
@@ -108,19 +99,14 @@ export class AuthService {
 
     if (!isPasswordValid) {
       // 보안: 과도한 사유 노출 금지
-      throw new UnauthorizedException(
-        '아이디 또는 비밀번호가 일치하지 않습니다.',
-      );
+      throw new UnauthorizedException("아이디 또는 비밀번호가 일치하지 않습니다.");
     }
 
     // 토큰 발급
     const tokens = this.generateTokens(user);
 
     // Refresh Token 회전: 새 refreshToken 해시로 갱신
-    const refreshTokenHash = await bcrypt.hash(
-      tokens.refreshToken,
-      bcryptConfig.saltRounds,
-    );
+    const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, bcryptConfig.saltRounds);
     user.refreshTokenHash = refreshTokenHash;
     await this.userRepository.save(user);
 
@@ -140,7 +126,7 @@ export class AuthService {
     try {
       // Refresh Token 검증 (서명/만료)
       const payload = this.jwtService.verify<{ sub: string }>(refreshToken, {
-        secret: this.configService.get<string>('jwt.refresh.secret'),
+        secret: this.configService.get<string>("jwt.refresh.secret"),
       });
 
       // 사용자 조회
@@ -149,21 +135,18 @@ export class AuthService {
       });
 
       if (!user) {
-        throw new UnauthorizedException('사용자를 찾을 수 없습니다.');
+        throw new UnauthorizedException("사용자를 찾을 수 없습니다.");
       }
 
       // DB의 refreshTokenHash와 제출된 refreshToken 비교
       if (!user.refreshTokenHash) {
-        throw new UnauthorizedException('유효하지 않은 refresh token입니다.');
+        throw new UnauthorizedException("유효하지 않은 refresh token입니다.");
       }
 
-      const isTokenValid = await bcrypt.compare(
-        refreshToken,
-        user.refreshTokenHash,
-      );
+      const isTokenValid = await bcrypt.compare(refreshToken, user.refreshTokenHash);
 
       if (!isTokenValid) {
-        throw new UnauthorizedException('유효하지 않은 refresh token입니다.');
+        throw new UnauthorizedException("유효하지 않은 refresh token입니다.");
       }
 
       // Access Token 재발급
@@ -171,10 +154,7 @@ export class AuthService {
 
       // Refresh Token 회전: 새 refreshToken 발급 + 해시 갱신
       const newRefreshToken = this.generateRefreshToken(user);
-      const refreshTokenHash = await bcrypt.hash(
-        newRefreshToken,
-        bcryptConfig.saltRounds,
-      );
+      const refreshTokenHash = await bcrypt.hash(newRefreshToken, bcryptConfig.saltRounds);
       user.refreshTokenHash = refreshTokenHash;
       await this.userRepository.save(user);
 
@@ -189,7 +169,7 @@ export class AuthService {
         throw error;
       }
       // JWT 검증 실패 (만료/위조/파싱불가 등)
-      throw new UnauthorizedException('유효하지 않은 refresh token입니다.');
+      throw new UnauthorizedException("유효하지 않은 refresh token입니다.");
     }
   }
 
@@ -204,7 +184,7 @@ export class AuthService {
     try {
       // Refresh Token 검증
       const payload = this.jwtService.verify<{ sub: string }>(refreshToken, {
-        secret: this.configService.get<string>('jwt.refresh.secret'),
+        secret: this.configService.get<string>("jwt.refresh.secret"),
       });
 
       // 사용자 조회 및 refreshTokenHash 폐기
@@ -235,7 +215,7 @@ export class AuthService {
     });
 
     if (!foundUser) {
-      throw new NotFoundException('사용자를 찾을 수 없습니다.');
+      throw new NotFoundException("사용자를 찾을 수 없습니다.");
     }
 
     return {
@@ -271,10 +251,10 @@ export class AuthService {
       role: user.role,
     };
 
-    const secret = this.configService.get<string>('jwt.access.secret');
-    const expiresIn = this.configService.get<string>('jwt.access.expiresIn');
+    const secret = this.configService.get<string>("jwt.access.secret");
+    const expiresIn = this.configService.get<string>("jwt.access.expiresIn");
     if (!secret || !expiresIn) {
-      throw new Error('JWT access secret or expiresIn is not defined');
+      throw new Error("JWT access secret or expiresIn is not defined");
     }
 
     return this.jwtService.sign(payload, {
@@ -292,10 +272,10 @@ export class AuthService {
       sub: user.id,
     };
 
-    const secret = this.configService.get<string>('jwt.refresh.secret');
-    const expiresIn = this.configService.get<string>('jwt.refresh.expiresIn');
+    const secret = this.configService.get<string>("jwt.refresh.secret");
+    const expiresIn = this.configService.get<string>("jwt.refresh.expiresIn");
     if (!secret || !expiresIn) {
-      throw new Error('JWT refresh secret or expiresIn is not defined');
+      throw new Error("JWT refresh secret or expiresIn is not defined");
     }
 
     return this.jwtService.sign(payload, {

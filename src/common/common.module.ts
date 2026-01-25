@@ -1,5 +1,5 @@
-import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
-import { RequestIdMiddleware } from './middleware/request-id.middleware';
+import { Module, NestModule, MiddlewareConsumer } from "@nestjs/common";
+import { RequestIdMiddleware } from "./middleware/request-id.middleware";
 
 /**
  * CommonModule
@@ -8,6 +8,6 @@ import { RequestIdMiddleware } from './middleware/request-id.middleware';
 @Module({})
 export class CommonModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(RequestIdMiddleware).forRoutes('*');
+    consumer.apply(RequestIdMiddleware).forRoutes("*");
   }
 }

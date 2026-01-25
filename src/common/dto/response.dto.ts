@@ -1,18 +1,18 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty } from "@nestjs/swagger";
 
 /**
  * Meta 정보 DTO
  */
 export class MetaDto {
   @ApiProperty({
-    description: '요청 ID',
-    example: '550e8400-e29b-41d4-a716-446655440000',
+    description: "요청 ID",
+    example: "550e8400-e29b-41d4-a716-446655440000",
   })
   requestId: string;
 
   @ApiProperty({
-    description: '응답 타임스탬프 (ISO 8601)',
-    example: '2026-01-19T11:47:42.123Z',
+    description: "응답 타임스탬프 (ISO 8601)",
+    example: "2026-01-19T11:47:42.123Z",
   })
   timestamp: string;
 }
@@ -22,32 +22,32 @@ export class MetaDto {
  */
 export class ErrorDto {
   @ApiProperty({
-    description: '에러 코드',
-    example: 'VALIDATION_ERROR',
+    description: "에러 코드",
+    example: "VALIDATION_ERROR",
     enum: [
-      'VALIDATION_ERROR',
-      'HTTP_ERROR',
-      'INTERNAL_ERROR',
-      'NOT_FOUND',
-      'BAD_REQUEST',
-      'UNAUTHORIZED',
-      'FORBIDDEN',
-      'TOKEN_EXPIRED',
+      "VALIDATION_ERROR",
+      "HTTP_ERROR",
+      "INTERNAL_ERROR",
+      "NOT_FOUND",
+      "BAD_REQUEST",
+      "UNAUTHORIZED",
+      "FORBIDDEN",
+      "TOKEN_EXPIRED",
     ],
   })
   code: string;
 
   @ApiProperty({
-    description: '에러 메시지',
-    example: 'Invalid request',
+    description: "에러 메시지",
+    example: "Invalid request",
   })
   message: string;
 
   @ApiProperty({
-    description: '에러 상세 정보 (선택적)',
+    description: "에러 상세 정보 (선택적)",
     example: {
-      name: ['should not be empty'],
-      url: ['must be a URL'],
+      name: ["should not be empty"],
+      url: ["must be a URL"],
     },
     required: false,
   })
@@ -61,7 +61,7 @@ export class SuccessResponseDto<T> {
   @ApiProperty({ type: MetaDto })
   meta: MetaDto;
 
-  @ApiProperty({ description: '응답 데이터' })
+  @ApiProperty({ description: "응답 데이터" })
   data: T;
 }
 

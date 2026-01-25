@@ -1,10 +1,11 @@
-import { Module, forwardRef } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { HealthService } from './health.service';
-import { JobsModule } from '../jobs/jobs.module';
-import { ExecutionsModule } from '../executions/executions.module';
-import { NotificationLogsModule } from '../notification-logs/notification-logs.module';
-import healthConfig from '../config/health.config';
+import { Module, forwardRef } from "@nestjs/common";
+import { ConfigModule } from "@nestjs/config";
+import { HealthService } from "./health.service";
+import { JobsModule } from "../jobs/jobs.module";
+import { ExecutionsModule } from "../executions/executions.module";
+import { NotificationLogsModule } from "../notification-logs/notification-logs.module";
+import { NotificationsModule } from "../notifications/notifications.module";
+import healthConfig from "../config/health.config";
 
 /**
  * HealthModule
@@ -16,6 +17,7 @@ import healthConfig from '../config/health.config';
     forwardRef(() => JobsModule),
     ExecutionsModule,
     NotificationLogsModule,
+    NotificationsModule,
   ],
   controllers: [],
   providers: [HealthService],

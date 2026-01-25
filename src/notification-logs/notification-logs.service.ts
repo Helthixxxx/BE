@@ -1,8 +1,8 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { NotificationLog } from './entities/notification-log.entity';
-import { CreateNotificationLogDto } from './dto/create-notification-log.dto';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { NotificationLog } from "./entities/notification-log.entity";
+import { CreateNotificationLogDto } from "./dto/create-notification-log.dto";
 
 /**
  * NotificationLogsService
@@ -31,7 +31,23 @@ export class NotificationLogsService {
   async findByJobId(jobId: string): Promise<NotificationLog[]> {
     return await this.notificationLogRepository.find({
       where: { jobId },
-      order: { sentAt: 'DESC' },
+      order: { sentAt: "DESC" },
+    });
+  }
+
+  /**
+   * NotificationLog 상태 업데이트
+   */
+  async updateStatus(
+    id: string,
+    status: string,
+    recipientCount: number,
+    errorMessage?: string | null,
+  ): Promise<void> {
+    await this.notificationLogRepository.update(id, {
+      status,
+      recipientCount,
+      errorMessage: errorMessage || null,
     });
   }
 }

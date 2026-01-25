@@ -7,9 +7,9 @@ import {
   UnauthorizedException,
   ForbiddenException,
   Logger,
-} from '@nestjs/common';
-import { Request, Response } from 'express';
-import { v4 as uuidv4 } from 'uuid';
+} from "@nestjs/common";
+import { Request, Response } from "express";
+import { v4 as uuidv4 } from "uuid";
 
 /**
  * Request 타입 확장 (requestId 포함)
@@ -48,8 +48,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const requestId = request.requestId;
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
-    let errorCode = 'INTERNAL_ERROR';
-    let message: string = 'Internal server error';
+    let errorCode = "INTERNAL_ERROR";
+    let message: string = "Internal server error";
     let details: Record<string, string[]> | undefined = undefined;
 
     if (exception instanceof HttpException) {
@@ -60,57 +60,48 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       if (exception instanceof UnauthorizedException) {
         // JWT 토큰 만료 또는 유효하지 않은 경우
         let errorMessage: string;
-        if (typeof exceptionResponse === 'string') {
+        if (typeof exceptionResponse === "string") {
           errorMessage = exceptionResponse;
         } else {
           const responseObj = exceptionResponse as HttpExceptionResponse;
           errorMessage =
-            typeof responseObj?.message === 'string'
-              ? responseObj.message
-              : exception.message;
+            typeof responseObj?.message === "string" ? responseObj.message : exception.message;
         }
         if (
-          errorMessage.includes('expired') ||
-          errorMessage.includes('만료') ||
-          errorMessage.includes('토큰')
+          errorMessage.includes("expired") ||
+          errorMessage.includes("만료") ||
+          errorMessage.includes("토큰")
         ) {
-          errorCode = 'TOKEN_EXPIRED';
+          errorCode = "TOKEN_EXPIRED";
         } else {
-          errorCode = 'UNAUTHORIZED';
+          errorCode = "UNAUTHORIZED";
         }
         message = errorMessage;
       } else if (exception instanceof ForbiddenException) {
-        errorCode = 'FORBIDDEN';
-        if (typeof exceptionResponse === 'string') {
+        errorCode = "FORBIDDEN";
+        if (typeof exceptionResponse === "string") {
           message = exceptionResponse;
         } else {
           const responseObj = exceptionResponse as HttpExceptionResponse;
           message =
-            typeof responseObj?.message === 'string'
-              ? responseObj.message
-              : exception.message;
+            typeof responseObj?.message === "string" ? responseObj.message : exception.message;
         }
-      } else if (
-        typeof exceptionResponse === 'object' &&
-        exceptionResponse !== null
-      ) {
+      } else if (typeof exceptionResponse === "object" && exceptionResponse !== null) {
         // NestJS ValidationPipe가 반환하는 형태 처리
         const responseObj = exceptionResponse as HttpExceptionResponse;
 
         if (responseObj.message && Array.isArray(responseObj.message)) {
           // Validation 에러인 경우
-          errorCode = 'VALIDATION_ERROR';
-          message = 'Invalid request';
+          errorCode = "VALIDATION_ERROR";
+          message = "Invalid request";
           details = this.formatValidationErrors(responseObj.message);
         } else {
-          errorCode = responseObj.error || responseObj.code || 'HTTP_ERROR';
+          errorCode = responseObj.error || responseObj.code || "HTTP_ERROR";
           message =
-            typeof responseObj.message === 'string'
-              ? responseObj.message
-              : exception.message;
+            typeof responseObj.message === "string" ? responseObj.message : exception.message;
           details = responseObj.details;
         }
-      } else if (typeof exceptionResponse === 'string') {
+      } else if (typeof exceptionResponse === "string") {
         message = exceptionResponse;
       }
     } else if (exception instanceof Error) {
@@ -151,14 +142,14 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const headers = request.headers as Record<string, unknown>;
     const query = request.query as Record<string, unknown>;
     const body = request.body as unknown;
-    const requestId = request.requestId || 'unknown';
+    const requestId = request.requestId || "unknown";
 
     // 민감한 정보 마스킹
     const maskedHeaders = this.maskSensitiveHeaders(headers);
     const maskedBody = this.maskSensitiveFields(body);
 
     const errorLog = {
-      type: 'EXCEPTION',
+      type: "EXCEPTION",
       requestId,
       method,
       url,
@@ -172,9 +163,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         body: maskedBody,
       },
       exception: {
-        name: exception instanceof Error ? exception.name : 'Unknown',
-        message:
-          exception instanceof Error ? exception.message : String(exception),
+        name: exception instanceof Error ? exception.name : "Unknown",
+        message: exception instanceof Error ? exception.message : String(exception),
         stack: exception instanceof Error ? exception.stack : undefined,
       },
       timestamp: new Date().toISOString(),
@@ -191,15 +181,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   /**
    * 민감한 헤더 마스킹
    */
-  private maskSensitiveHeaders(
-    headers: Record<string, unknown>,
-  ): Record<string, unknown> {
-    const sensitiveHeaders = ['authorization', 'cookie', 'x-api-key'];
+  private maskSensitiveHeaders(headers: Record<string, unknown>): Record<string, unknown> {
+    const sensitiveHeaders = ["authorization", "cookie", "x-api-key"];
     const masked: Record<string, unknown> = { ...headers };
 
     for (const key of Object.keys(masked)) {
       if (sensitiveHeaders.includes(key.toLowerCase())) {
-        masked[key] = '***';
+        masked[key] = "***";
       }
     }
 
@@ -210,7 +198,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
    * 민감한 필드 마스킹
    */
   private maskSensitiveFields(data: unknown): unknown {
-    if (!data || typeof data !== 'object') {
+    if (!data || typeof data !== "object") {
       return data;
     }
 
@@ -219,13 +207,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     }
 
     const sensitiveFields = [
-      'password',
-      'token',
-      'accessToken',
-      'refreshToken',
-      'secret',
-      'apiKey',
-      'authorization',
+      "password",
+      "token",
+      "accessToken",
+      "refreshToken",
+      "secret",
+      "apiKey",
+      "authorization",
     ];
 
     const masked: Record<string, unknown> = {
@@ -234,8 +222,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     for (const key of Object.keys(masked)) {
       if (sensitiveFields.includes(key.toLowerCase())) {
-        masked[key] = '***';
-      } else if (typeof masked[key] === 'object' && masked[key] !== null) {
+        masked[key] = "***";
+      } else if (typeof masked[key] === "object" && masked[key] !== null) {
         masked[key] = this.maskSensitiveFields(masked[key]);
       }
     }
@@ -262,10 +250,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         result[property].push(errorMsg);
       } else {
         // 파싱 실패 시 전체 메시지를 사용
-        if (!result['_general']) {
-          result['_general'] = [];
+        if (!result["_general"]) {
+          result["_general"] = [];
         }
-        result['_general'].push(msg);
+        result["_general"].push(msg);
       }
     }
 

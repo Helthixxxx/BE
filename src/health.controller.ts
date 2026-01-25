@@ -1,13 +1,13 @@
-import { Controller, Get } from '@nestjs/common';
-import * as os from 'os';
+import { Controller, Get } from "@nestjs/common";
+import * as os from "os";
 
 @Controller()
 export class HealthController {
-  @Get('/health')
+  @Get("/health")
   health() {
     const hostname = os.hostname();
     return {
-      status: 'ok',
+      status: "ok",
       instanceId: hostname,
       timestamp: new Date().toISOString(),
     };

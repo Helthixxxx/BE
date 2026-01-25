@@ -1,13 +1,8 @@
-import {
-  Injectable,
-  NestInterceptor,
-  ExecutionContext,
-  CallHandler,
-} from '@nestjs/common';
-import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
-import { Request } from 'express';
-import { v4 as uuidv4 } from 'uuid';
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from "@nestjs/common";
+import { Observable } from "rxjs";
+import { map } from "rxjs/operators";
+import { Request } from "express";
+import { v4 as uuidv4 } from "uuid";
 
 /**
  * Request 타입 확장 (requestId 포함)
@@ -35,10 +30,7 @@ interface ResponseEnvelope<T> {
  */
 @Injectable()
 export class ResponseEnvelopeInterceptor implements NestInterceptor {
-  intercept<T>(
-    context: ExecutionContext,
-    next: CallHandler,
-  ): Observable<ResponseEnvelope<T>> {
+  intercept<T>(context: ExecutionContext, next: CallHandler): Observable<ResponseEnvelope<T>> {
     const request = context.switchToHttp().getRequest<RequestWithId>();
     // requestId가 없으면 즉시 생성하여 request 객체에 저장
     if (!request.requestId) {

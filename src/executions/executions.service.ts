@@ -1,11 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Execution } from './entities/execution.entity';
-import { ErrorType } from '../common/enums/error-type.enum';
-import { ExecutionListResponseDto } from './dto/execution-response.dto';
-import { encodeCursor, decodeCursor } from './dto/cursor.dto';
-import { JobsService } from '../jobs/jobs.service';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { Execution } from "./entities/execution.entity";
+import { ErrorType } from "../common/enums/error-type.enum";
+import { ExecutionListResponseDto } from "./dto/execution-response.dto";
+import { encodeCursor, decodeCursor } from "./dto/cursor.dto";
+import { JobsService } from "../jobs/jobs.service";
 
 /**
  * ExecutionsService
@@ -24,11 +24,7 @@ export class ExecutionsService {
    * Execution 생성 (스케줄러에서 사용)
    * executionKey로 중복 실행 방지
    */
-  async create(
-    jobId: string,
-    scheduledAt: Date,
-    startedAt: Date,
-  ): Promise<Execution> {
+  async create(jobId: string, scheduledAt: Date, startedAt: Date): Promise<Execution> {
     const executionKey = `${jobId}:${scheduledAt.toISOString()}`;
 
     // 중복 실행 방지: executionKey unique constraint 활용
@@ -115,17 +111,17 @@ export class ExecutionsService {
     cursor?: string,
   ): Promise<ExecutionListResponseDto> {
     const queryBuilder = this.executionRepository
-      .createQueryBuilder('execution')
-      .where('execution.jobId = :jobId', { jobId })
-      .orderBy('execution.createdAt', 'DESC')
-      .addOrderBy('execution.id', 'DESC')
+      .createQueryBuilder("execution")
+      .where("execution.jobId = :jobId", { jobId })
+      .orderBy("execution.createdAt", "DESC")
+      .addOrderBy("execution.id", "DESC")
       .limit(limit + 1); // nextCursor 판단을 위해 +1
 
     // cursor가 있으면 조건 추가
     if (cursor) {
       const decodedCursor = decodeCursor(cursor);
       queryBuilder.andWhere(
-        '(execution.createdAt < :cursorCreatedAt OR (execution.createdAt = :cursorCreatedAt AND execution.id < :cursorId))',
+        "(execution.createdAt < :cursorCreatedAt OR (execution.createdAt = :cursorCreatedAt AND execution.id < :cursorId))",
         {
           cursorCreatedAt: decodedCursor.createdAt,
           cursorId: decodedCursor.id,
@@ -149,10 +145,7 @@ export class ExecutionsService {
     // 각 Execution에 성능 추이 정보 추가
     const executionsWithTrend = await Promise.all(
       executions.map(async (execution) => {
-        const performanceTrend = await this.calculatePerformanceTrend(
-          jobId,
-          execution,
-        );
+        const performanceTrend = await this.calculatePerformanceTrend(jobId, execution);
         return {
           ...execution,
           performanceTrend,
@@ -177,7 +170,7 @@ export class ExecutionsService {
     previousAvg: number;
     currentAvg: number;
     changePercent: number;
-    trend: 'improved' | 'stable' | 'degraded';
+    trend: "improved" | "stable" | "degraded";
   } | null> {
     // 현재 Execution의 durationMs가 없으면 null 반환
     if (!currentExecution.durationMs || !currentExecution.finishedAt) {
@@ -187,7 +180,7 @@ export class ExecutionsService {
     // 현재 Execution 이전의 Execution 10개 조회
     const previousExecutions = await this.executionRepository.find({
       where: { jobId },
-      order: { createdAt: 'DESC', id: 'DESC' },
+      order: { createdAt: "DESC", id: "DESC" },
       take: 20, // 충분히 많이 가져와서 필터링
     });
 
@@ -211,29 +204,26 @@ export class ExecutionsService {
 
     // 이전 10개 평균 계산
     const previousAvg =
-      finishedBefore.reduce((sum, exec) => sum + (exec.durationMs || 0), 0) /
-      finishedBefore.length;
+      finishedBefore.reduce((sum, exec) => sum + (exec.durationMs || 0), 0) / finishedBefore.length;
 
     // 현재 Execution의 durationMs
     const currentDuration = currentExecution.durationMs;
 
     // 변화율 계산 (양수면 느려짐, 음수면 빨라짐)
     const changePercent =
-      previousAvg > 0
-        ? ((currentDuration - previousAvg) / previousAvg) * 100
-        : 0;
+      previousAvg > 0 ? ((currentDuration - previousAvg) / previousAvg) * 100 : 0;
 
     // trend 판단
-    let trend: 'improved' | 'stable' | 'degraded';
+    let trend: "improved" | "stable" | "degraded";
     if (changePercent <= -10) {
       // 10% 이상 빨라짐
-      trend = 'improved';
+      trend = "improved";
     } else if (changePercent >= 50) {
       // 50% 이상 느려짐
-      trend = 'degraded';
+      trend = "degraded";
     } else {
       // 안정적
-      trend = 'stable';
+      trend = "stable";
     }
 
     return {
@@ -247,13 +237,10 @@ export class ExecutionsService {
   /**
    * Job의 최근 Execution 목록 조회 (Health 계산용)
    */
-  async findRecentByJobId(
-    jobId: string,
-    limit: number = 10,
-  ): Promise<Execution[]> {
+  async findRecentByJobId(jobId: string, limit: number = 10): Promise<Execution[]> {
     return await this.executionRepository.find({
       where: { jobId },
-      order: { createdAt: 'DESC', id: 'DESC' },
+      order: { createdAt: "DESC", id: "DESC" },
       take: limit,
     });
   }

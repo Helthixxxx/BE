@@ -5,7 +5,7 @@
  * FAILED: 실패 (최근 3회 연속 실패 또는 실행 중단)
  */
 export enum Health {
-  NORMAL = 'NORMAL',
-  DEGRADED = 'DEGRADED',
-  FAILED = 'FAILED',
+  NORMAL = "NORMAL",
+  DEGRADED = "DEGRADED",
+  FAILED = "FAILED",
 }

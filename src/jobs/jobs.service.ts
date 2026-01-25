@@ -1,10 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Job } from './entities/job.entity';
-import { CreateJobDto } from './dto/create-job.dto';
-import { UpdateJobDto } from './dto/update-job.dto';
-import { Health } from '../common/enums/health.enum';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { Job } from "./entities/job.entity";
+import { CreateJobDto } from "./dto/create-job.dto";
+import { UpdateJobDto } from "./dto/update-job.dto";
+import { Health } from "../common/enums/health.enum";
 
 /**
  * JobsService
@@ -37,10 +37,7 @@ export class JobsService {
 
     // 저장 후 createdAt이 설정되므로, 이를 기준으로 nextRunAt 계산
     if (isActive && savedJob.createdAt) {
-      const nextRunAt = this.calculateNextRunAt(
-        savedJob.createdAt,
-        savedJob.scheduleMinutes,
-      );
+      const nextRunAt = this.calculateNextRunAt(savedJob.createdAt, savedJob.scheduleMinutes);
       savedJob.nextRunAt = nextRunAt;
       return await this.jobRepository.save(savedJob);
     }
@@ -54,7 +51,7 @@ export class JobsService {
    */
   async findAll(includeHealth: boolean = false): Promise<Job[]> {
     const jobs = await this.jobRepository.find({
-      order: { createdAt: 'DESC' },
+      order: { createdAt: "DESC" },
     });
 
     if (includeHealth) {
@@ -122,7 +119,7 @@ export class JobsService {
   async findActiveJobs(): Promise<Job[]> {
     return await this.jobRepository.find({
       where: { isActive: true },
-      order: { nextRunAt: 'ASC' },
+      order: { nextRunAt: "ASC" },
     });
   }
 
@@ -131,6 +128,38 @@ export class JobsService {
    */
   async updateLastHealth(jobId: string, health: Health): Promise<void> {
     await this.jobRepository.update(jobId, { lastHealth: health });
+  }
+
+  /**
+   * Job의 알림 발송 정보 업데이트
+   */
+  async updateNotificationInfo(
+    jobId: string,
+    lastNotificationSentAt: Date,
+    lastNotificationHealth: Health,
+  ): Promise<void> {
+    await this.jobRepository.update(jobId, {
+      lastNotificationSentAt,
+      lastNotificationHealth,
+    });
+  }
+
+  /**
+   * Job 조회 (Lock용)
+   * SELECT FOR UPDATE로 동시성 제어
+   */
+  async findOneWithLock(jobId: string): Promise<Job> {
+    const job = await this.jobRepository
+      .createQueryBuilder("job")
+      .where("job.id = :id", { id: jobId })
+      .setLock("pessimistic_write")
+      .getOne();
+
+    if (!job) {
+      throw new NotFoundException(`Job with ID ${jobId} not found`);
+    }
+
+    return job;
   }
 
   /**
