@@ -118,7 +118,10 @@ async function bootstrap() {
   app.useGlobalFilters(new GlobalExceptionFilter());
 
   // 전역 Interceptor 설정 (로깅을 먼저, 그 다음 응답 envelope)
-  app.useGlobalInterceptors(new LoggingInterceptor(), new ResponseEnvelopeInterceptor());
+  app.useGlobalInterceptors(
+    new LoggingInterceptor(),
+    new ResponseEnvelopeInterceptor(),
+  );
 
   // Swagger 설정
   const swaggerUrl = process.env.SWAGGER_URL || "/api-docs";
