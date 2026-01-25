@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { Repository, DataSource } from "typeorm";
 import { JwtService, JwtSignOptions } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
 import * as bcrypt from "bcrypt";
@@ -30,95 +30,107 @@ export class AuthService {
     private userRepository: Repository<User>,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private dataSource: DataSource,
   ) {}
 
   /**
    * 회원가입
    * provider='local' 고정, (provider, providerId) 중복 체크
    * 가입 즉시 로그인 처리 (accessToken + refreshToken 발급)
+   * 트랜잭션으로 일관성 보장
    */
   async signup(signupDto: SignupDto): Promise<AuthResponseDto> {
     const { providerId, password } = signupDto;
 
-    // 중복 체크: (provider='local', providerId)
-    const existingUser = await this.userRepository.findOne({
-      where: { provider: "local", providerId },
+    return await this.dataSource.transaction(async (manager) => {
+      const userRepo = manager.getRepository(User);
+
+      // 중복 체크: (provider='local', providerId)
+      const existingUser = await userRepo.findOne({
+        where: { provider: "local", providerId },
+      });
+
+      if (existingUser) {
+        throw new ConflictException("이미 사용 중인 아이디입니다.");
+      }
+
+      // 비밀번호 해시
+      const passwordHash = await bcrypt.hash(password, bcryptConfig.saltRounds);
+
+      // User 생성 (USER role 기본값)
+      const user = userRepo.create({
+        provider: "local",
+        providerId,
+        passwordHash,
+        role: UserRole.USER,
+      });
+
+      const savedUser = await userRepo.save(user);
+
+      // 토큰 발급
+      const tokens = this.generateTokens(savedUser);
+
+      // Refresh Token 해시 저장
+      const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, bcryptConfig.saltRounds);
+      savedUser.refreshTokenHash = refreshTokenHash;
+      await userRepo.save(savedUser);
+
+      return {
+        tokens,
+        user: this.toUserInfo(savedUser),
+      };
     });
-
-    if (existingUser) {
-      throw new ConflictException("이미 사용 중인 아이디입니다.");
-    }
-
-    // 비밀번호 해시
-    const passwordHash = await bcrypt.hash(password, bcryptConfig.saltRounds);
-
-    // User 생성 (USER role 기본값)
-    const user = this.userRepository.create({
-      provider: "local",
-      providerId,
-      passwordHash,
-      role: UserRole.USER,
-    });
-
-    const savedUser = await this.userRepository.save(user);
-
-    // 토큰 발급
-    const tokens = this.generateTokens(savedUser);
-
-    // Refresh Token 해시 저장
-    const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, bcryptConfig.saltRounds);
-    savedUser.refreshTokenHash = refreshTokenHash;
-    await this.userRepository.save(savedUser);
-
-    return {
-      tokens,
-      user: this.toUserInfo(savedUser),
-    };
   }
 
   /**
    * 로그인
    * user 조회 by (provider='local', providerId) + bcrypt compare
    * accessToken + refreshToken 발급 및 refreshTokenHash 갱신(회전)
+   * 트랜잭션으로 일관성 보장
    */
   async login(loginDto: LoginDto): Promise<AuthResponseDto> {
     const { providerId, password } = loginDto;
 
-    // 사용자 조회
-    const user = await this.userRepository.findOne({
-      where: { provider: "local", providerId },
+    return await this.dataSource.transaction(async (manager) => {
+      const userRepo = manager.getRepository(User);
+
+      // 사용자 조회
+      const user = await userRepo.findOne({
+        where: { provider: "local", providerId },
+      });
+
+      if (!user) {
+        // 보안: 과도한 사유 노출 금지
+        throw new UnauthorizedException("아이디 또는 비밀번호가 일치하지 않습니다.");
+      }
+
+      // 비밀번호 검증
+      const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+
+      if (!isPasswordValid) {
+        // 보안: 과도한 사유 노출 금지
+        throw new UnauthorizedException("아이디 또는 비밀번호가 일치하지 않습니다.");
+      }
+
+      // 토큰 발급
+      const tokens = this.generateTokens(user);
+
+      // Refresh Token 회전: 새 refreshToken 해시로 갱신
+      const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, bcryptConfig.saltRounds);
+      user.refreshTokenHash = refreshTokenHash;
+      await userRepo.save(user);
+
+      return {
+        tokens,
+        user: this.toUserInfo(user),
+      };
     });
-
-    if (!user) {
-      // 보안: 과도한 사유 노출 금지
-      throw new UnauthorizedException("아이디 또는 비밀번호가 일치하지 않습니다.");
-    }
-
-    // 비밀번호 검증
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-
-    if (!isPasswordValid) {
-      // 보안: 과도한 사유 노출 금지
-      throw new UnauthorizedException("아이디 또는 비밀번호가 일치하지 않습니다.");
-    }
-
-    // 토큰 발급
-    const tokens = this.generateTokens(user);
-
-    // Refresh Token 회전: 새 refreshToken 해시로 갱신
-    const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, bcryptConfig.saltRounds);
-    user.refreshTokenHash = refreshTokenHash;
-    await this.userRepository.save(user);
-
-    return {
-      tokens,
-      user: this.toUserInfo(user),
-    };
   }
 
   /**
    * Refresh Token으로 Access Token 재발급
    * refreshToken 검증 → accessToken 재발급 → refreshToken 회전
+   * 트랜잭션으로 일관성 보장
    */
   async refresh(refreshDto: RefreshDto): Promise<RefreshResponseDto> {
     const { refreshToken } = refreshDto;
@@ -129,41 +141,45 @@ export class AuthService {
         secret: this.configService.get<string>("jwt.refresh.secret"),
       });
 
-      // 사용자 조회
-      const user = await this.userRepository.findOne({
-        where: { id: payload.sub },
+      return await this.dataSource.transaction(async (manager) => {
+        const userRepo = manager.getRepository(User);
+
+        // 사용자 조회
+        const user = await userRepo.findOne({
+          where: { id: payload.sub },
+        });
+
+        if (!user) {
+          throw new UnauthorizedException("사용자를 찾을 수 없습니다.");
+        }
+
+        // DB의 refreshTokenHash와 제출된 refreshToken 비교
+        if (!user.refreshTokenHash) {
+          throw new UnauthorizedException("유효하지 않은 refresh token입니다.");
+        }
+
+        const isTokenValid = await bcrypt.compare(refreshToken, user.refreshTokenHash);
+
+        if (!isTokenValid) {
+          throw new UnauthorizedException("유효하지 않은 refresh token입니다.");
+        }
+
+        // Access Token 재발급
+        const accessToken = this.generateAccessToken(user);
+
+        // Refresh Token 회전: 새 refreshToken 발급 + 해시 갱신
+        const newRefreshToken = this.generateRefreshToken(user);
+        const refreshTokenHash = await bcrypt.hash(newRefreshToken, bcryptConfig.saltRounds);
+        user.refreshTokenHash = refreshTokenHash;
+        await userRepo.save(user);
+
+        return {
+          tokens: {
+            accessToken,
+            refreshToken: newRefreshToken,
+          },
+        };
       });
-
-      if (!user) {
-        throw new UnauthorizedException("사용자를 찾을 수 없습니다.");
-      }
-
-      // DB의 refreshTokenHash와 제출된 refreshToken 비교
-      if (!user.refreshTokenHash) {
-        throw new UnauthorizedException("유효하지 않은 refresh token입니다.");
-      }
-
-      const isTokenValid = await bcrypt.compare(refreshToken, user.refreshTokenHash);
-
-      if (!isTokenValid) {
-        throw new UnauthorizedException("유효하지 않은 refresh token입니다.");
-      }
-
-      // Access Token 재발급
-      const accessToken = this.generateAccessToken(user);
-
-      // Refresh Token 회전: 새 refreshToken 발급 + 해시 갱신
-      const newRefreshToken = this.generateRefreshToken(user);
-      const refreshTokenHash = await bcrypt.hash(newRefreshToken, bcryptConfig.saltRounds);
-      user.refreshTokenHash = refreshTokenHash;
-      await this.userRepository.save(user);
-
-      return {
-        tokens: {
-          accessToken,
-          refreshToken: newRefreshToken,
-        },
-      };
     } catch (error) {
       if (error instanceof UnauthorizedException) {
         throw error;

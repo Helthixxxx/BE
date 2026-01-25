@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { Repository, DataSource } from "typeorm";
 import { Execution } from "./entities/execution.entity";
 import { ErrorType } from "../common/enums/error-type.enum";
 import { ExecutionListResponseDto } from "./dto/execution-response.dto";
@@ -18,34 +18,49 @@ export class ExecutionsService {
     @InjectRepository(Execution)
     private readonly executionRepository: Repository<Execution>,
     private readonly jobsService: JobsService,
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
    * Execution 생성 (스케줄러에서 사용)
    * executionKey로 중복 실행 방지
+   * 트랜잭션과 UNIQUE 제약 조건으로 Race condition 방지
    */
   async create(jobId: string, scheduledAt: Date, startedAt: Date): Promise<Execution> {
     const executionKey = `${jobId}:${scheduledAt.toISOString()}`;
 
-    // 중복 실행 방지: executionKey unique constraint 활용
-    const existing = await this.executionRepository.findOne({
-      where: { executionKey },
-    });
+    try {
+      return await this.dataSource.transaction(async (manager) => {
+        const executionRepo = manager.getRepository(Execution);
 
-    if (existing) {
-      throw new Error(`Execution already exists for key: ${executionKey}`);
+        // 중복 실행 방지: executionKey unique constraint 활용
+        // 트랜잭션 내에서 조회하여 Race condition 방지
+        const existing = await executionRepo.findOne({
+          where: { executionKey },
+        });
+
+        if (existing) {
+          throw new Error(`Execution already exists for key: ${executionKey}`);
+        }
+
+        const execution = executionRepo.create({
+          jobId,
+          scheduledAt,
+          startedAt,
+          success: false,
+          errorType: ErrorType.NONE,
+          executionKey, // executionKey 설정
+        });
+
+        return await executionRepo.save(execution);
+      });
+    } catch (error) {
+      // UNIQUE 제약 조건 위반 시에도 동일한 에러 메시지 반환
+      if (error instanceof Error && error.message.includes("duplicate key")) {
+        throw new Error(`Execution already exists for key: ${executionKey}`);
+      }
+      throw error;
     }
-
-    const execution = this.executionRepository.create({
-      jobId,
-      scheduledAt,
-      startedAt,
-      success: false,
-      errorType: ErrorType.NONE,
-      executionKey, // executionKey 설정
-    });
-
-    return await this.executionRepository.save(execution);
   }
 
   /**
@@ -142,16 +157,9 @@ export class ExecutionsService {
       executions.pop(); // 마지막 항목 제거
     }
 
-    // 각 Execution에 성능 추이 정보 추가
-    const executionsWithTrend = await Promise.all(
-      executions.map(async (execution) => {
-        const performanceTrend = await this.calculatePerformanceTrend(jobId, execution);
-        return {
-          ...execution,
-          performanceTrend,
-        };
-      }),
-    );
+    // 성능 추이 계산을 위한 배치 처리
+    // 모든 execution에 대해 필요한 이전 execution들을 한 번에 조회
+    const executionsWithTrend = await this.calculatePerformanceTrendsBatch(jobId, executions);
 
     return {
       items: executionsWithTrend,
@@ -160,32 +168,64 @@ export class ExecutionsService {
   }
 
   /**
-   * 성능 추이 계산
-   * 현재 Execution 이전의 10개 Execution 평균과 비교
+   * 성능 추이 계산 (배치 처리)
+   * 모든 execution에 대해 필요한 이전 execution들을 한 번에 조회하여 N+1 쿼리 문제 해결
    */
-  private async calculatePerformanceTrend(
+  private async calculatePerformanceTrendsBatch(
     jobId: string,
+    executions: Execution[],
+  ): Promise<
+    Array<Execution & { performanceTrend: ReturnType<typeof this.calculatePerformanceTrend> }>
+  > {
+    // durationMs가 없는 execution은 null 반환
+    const executionsWithDuration = executions.filter(
+      (exec) => exec.durationMs !== null && exec.finishedAt !== null,
+    );
+
+    if (executionsWithDuration.length === 0) {
+      return executions.map((exec) => ({ ...exec, performanceTrend: null }));
+    }
+
+    // 모든 execution 이전의 execution들을 한 번에 조회
+    const allPreviousExecutions = await this.executionRepository.find({
+      where: { jobId },
+      order: { createdAt: "DESC", id: "DESC" },
+      take: 100, // 충분히 많이 가져와서 필터링 (최대 20개 execution * 10개 이전 = 200개 필요하지만 안전하게 100개)
+    });
+
+    // 각 execution에 대해 성능 추이 계산
+    return executions.map((execution) => {
+      const performanceTrend = this.calculatePerformanceTrendInternal(
+        execution,
+        allPreviousExecutions,
+      );
+      return {
+        ...execution,
+        performanceTrend,
+      };
+    });
+  }
+
+  /**
+   * 성능 추이 계산 (내부 로직)
+   * 메모리에서 이미 조회된 execution 목록을 사용
+   */
+  private calculatePerformanceTrendInternal(
     currentExecution: Execution,
-  ): Promise<{
+    allPreviousExecutions: Execution[],
+  ): {
     previousAvg: number;
     currentAvg: number;
     changePercent: number;
     trend: "improved" | "stable" | "degraded";
-  } | null> {
+  } | null {
     // 현재 Execution의 durationMs가 없으면 null 반환
     if (!currentExecution.durationMs || !currentExecution.finishedAt) {
       return null;
     }
 
-    // 현재 Execution 이전의 Execution 10개 조회
-    const previousExecutions = await this.executionRepository.find({
-      where: { jobId },
-      order: { createdAt: "DESC", id: "DESC" },
-      take: 20, // 충분히 많이 가져와서 필터링
-    });
-
     // 현재 Execution보다 이전인 것들만 필터링
-    const beforeCurrent = previousExecutions.filter(
+    const beforeCurrent = allPreviousExecutions.filter(
       (exec) =>
         exec.createdAt < currentExecution.createdAt ||
         (exec.createdAt.getTime() === currentExecution.createdAt.getTime() &&
@@ -232,6 +272,29 @@ export class ExecutionsService {
       changePercent: Math.round(changePercent * 100) / 100, // 소수점 2자리
       trend,
     };
+  }
+
+  /**
+   * 성능 추이 계산 (단일 execution용, 하위 호환성)
+   * @deprecated calculatePerformanceTrendsBatch를 사용하세요
+   */
+  private async calculatePerformanceTrend(
+    jobId: string,
+    currentExecution: Execution,
+  ): Promise<{
+    previousAvg: number;
+    currentAvg: number;
+    changePercent: number;
+    trend: "improved" | "stable" | "degraded";
+  } | null> {
+    // 현재 Execution 이전의 Execution들을 조회
+    const allPreviousExecutions = await this.executionRepository.find({
+      where: { jobId },
+      order: { createdAt: "DESC", id: "DESC" },
+      take: 100,
+    });
+
+    return this.calculatePerformanceTrendInternal(currentExecution, allPreviousExecutions);
   }
 
   /**

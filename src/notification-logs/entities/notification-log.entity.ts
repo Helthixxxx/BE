@@ -105,9 +105,6 @@ export class NotificationLog {
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;
 
-  @OneToMany(
-    () => NotificationRecipient,
-    (recipient) => recipient.notificationLog,
-  )
+  @OneToMany(() => NotificationRecipient, (recipient) => recipient.notificationLog)
   recipients: NotificationRecipient[];
 }

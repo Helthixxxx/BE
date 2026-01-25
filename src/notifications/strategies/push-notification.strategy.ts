@@ -182,6 +182,7 @@ export class PushNotificationStrategy implements NotificationStrategy {
 
   /**
    * 에러 처리
+   * 배치 저장으로 최적화
    */
   private async processError(
     devices: Device[],
@@ -190,19 +191,22 @@ export class PushNotificationStrategy implements NotificationStrategy {
   ): Promise<NotificationResult> {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
-    // 모든 Device에 대해 실패로 기록
+    // 모든 Device에 대해 실패로 기록 (배치 저장)
     await this.dataSource.transaction(async (manager) => {
       const recipientRepo = manager.getRepository(NotificationRecipient);
 
-      for (const device of devices) {
-        const recipient = recipientRepo.create({
+      const recipients = devices.map((device) =>
+        recipientRepo.create({
           notificationLogId,
           deviceId: device.id,
           userId: device.userId,
           status: "failed",
           errorMessage,
-        });
-        await recipientRepo.save(recipient);
+        }),
+      );
+
+      if (recipients.length > 0) {
+        await recipientRepo.save(recipients);
       }
     });
 

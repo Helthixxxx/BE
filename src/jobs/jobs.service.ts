@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, EntityManager } from "typeorm";
+import { Repository, EntityManager, DataSource } from "typeorm";
 import { Job } from "./entities/job.entity";
 import { CreateJobDto } from "./dto/create-job.dto";
 import { UpdateJobDto } from "./dto/update-job.dto";
@@ -15,34 +15,40 @@ export class JobsService {
   constructor(
     @InjectRepository(Job)
     private readonly jobRepository: Repository<Job>,
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
    * Job 생성
    * 활성화된 Job의 경우 nextRunAt을 자동으로 설정
    * 생성일시(createdAt)로부터 정확히 스케줄 시간을 더함
+   * 트랜잭션으로 일관성 보장
    * @param createJobDto Job 생성 데이터
    */
   async create(createJobDto: CreateJobDto): Promise<Job> {
     const isActive = createJobDto.isActive ?? true;
 
-    const job = this.jobRepository.create({
-      ...createJobDto,
-      isActive,
-      nextRunAt: null, // 일단 null로 설정, 저장 후 createdAt 기준으로 계산
-      lastHealth: null,
+    return await this.dataSource.transaction(async (manager) => {
+      const jobRepo = manager.getRepository(Job);
+
+      const job = jobRepo.create({
+        ...createJobDto,
+        isActive,
+        nextRunAt: null, // 일단 null로 설정, 저장 후 createdAt 기준으로 계산
+        lastHealth: null,
+      });
+
+      const savedJob = await jobRepo.save(job);
+
+      // 저장 후 createdAt이 설정되므로, 이를 기준으로 nextRunAt 계산
+      if (isActive && savedJob.createdAt) {
+        const nextRunAt = this.calculateNextRunAt(savedJob.createdAt, savedJob.scheduleMinutes);
+        savedJob.nextRunAt = nextRunAt;
+        return await jobRepo.save(savedJob);
+      }
+
+      return savedJob;
     });
-
-    const savedJob = await this.jobRepository.save(job);
-
-    // 저장 후 createdAt이 설정되므로, 이를 기준으로 nextRunAt 계산
-    if (isActive && savedJob.createdAt) {
-      const nextRunAt = this.calculateNextRunAt(savedJob.createdAt, savedJob.scheduleMinutes);
-      savedJob.nextRunAt = nextRunAt;
-      return await this.jobRepository.save(savedJob);
-    }
-
-    return savedJob;
   }
 
   /**
@@ -150,9 +156,7 @@ export class JobsService {
    * 트랜잭션 매니저가 제공되면 해당 트랜잭션 내에서 실행
    */
   async findOneWithLock(jobId: string, manager?: EntityManager): Promise<Job> {
-    const repository = manager
-      ? manager.getRepository(Job)
-      : this.jobRepository;
+    const repository = manager ? manager.getRepository(Job) : this.jobRepository;
 
     const job = await repository
       .createQueryBuilder("job")

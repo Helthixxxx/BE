@@ -28,5 +28,21 @@ export default registerAs(
             rejectUnauthorized: false, // RDS 자체 서명 인증서 사용
           }
         : false,
+    // 연결 풀 설정
+    extra: {
+      // 최대 연결 수 (기본값: 10)
+      max: parseInt(process.env.DB_POOL_MAX || "20", 10),
+      // 최소 유지 연결 수 (기본값: 0)
+      min: parseInt(process.env.DB_POOL_MIN || "5", 10),
+      // 연결 타임아웃 (밀리초, 기본값: 10000)
+      connectionTimeoutMillis: parseInt(process.env.DB_CONNECTION_TIMEOUT_MS || "10000", 10),
+      // 유휴 연결 타임아웃 (밀리초, 기본값: 30000)
+      idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT_MS || "30000", 10),
+      // 연결 획득 타임아웃 (밀리초, 기본값: 10000)
+      acquireTimeoutMillis: parseInt(process.env.DB_ACQUIRE_TIMEOUT_MS || "10000", 10),
+    },
+    // 쿼리 타임아웃 (밀리초, 기본값: 30000)
+    // TypeORM의 queryTimeout은 extra 옵션으로 설정
+    connectTimeoutMS: parseInt(process.env.DB_QUERY_TIMEOUT_MS || "30000", 10),
   }),
 );
