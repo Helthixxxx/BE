@@ -1,5 +1,6 @@
 import { Injectable, Inject, forwardRef, Logger } from "@nestjs/common";
 import { ConfigType } from "@nestjs/config";
+import { DataSource } from "typeorm";
 import { JobsService } from "../jobs/jobs.service";
 import { ExecutionsService } from "../executions/executions.service";
 import { NotificationLogsService } from "../notification-logs/notification-logs.service";
@@ -28,6 +29,7 @@ export class HealthService {
     private readonly notificationsService: NotificationsService,
     @Inject(healthConfig.KEY)
     private readonly healthConfiguration: ConfigType<typeof healthConfig>,
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -127,80 +129,83 @@ export class HealthService {
    * DB Lock을 사용하여 동시성 제어 및 중복 발송 방지
    */
   async updateHealthAndNotify(jobId: string): Promise<Health> {
-    // DB Lock으로 동시성 제어
-    const job = await this.jobsService.findOneWithLock(jobId);
-    const currentHealth = await this.calculateHealth(jobId);
-    const prevHealth = job.lastHealth;
+    // 트랜잭션 내에서 비관적 잠금 사용
+    return await this.dataSource.transaction(async (manager) => {
+      // DB Lock으로 동시성 제어 (트랜잭션 내에서 실행)
+      const job = await this.jobsService.findOneWithLock(jobId, manager);
+      const currentHealth = await this.calculateHealth(jobId);
+      const prevHealth = job.lastHealth;
 
-    // 상태 전이 감지
-    if (prevHealth !== currentHealth) {
-      const reason = this.getHealthChangeReason(prevHealth, currentHealth);
+      // 상태 전이 감지
+      if (prevHealth !== currentHealth) {
+        const reason = this.getHealthChangeReason(prevHealth, currentHealth);
 
-      // 알림 발송 조건 확인
-      const shouldNotify = this.shouldSendNotification(
-        prevHealth,
-        currentHealth,
-        job.lastNotificationSentAt,
-        job.lastNotificationHealth,
-      );
+        // 알림 발송 조건 확인
+        const shouldNotify = this.shouldSendNotification(
+          prevHealth,
+          currentHealth,
+          job.lastNotificationSentAt,
+          job.lastNotificationHealth,
+        );
 
-      // NotificationLog 먼저 생성 (알림 발송 여부와 무관)
-      const notificationLog = await this.notificationLogsService.create({
-        jobId,
-        prevHealth,
-        nextHealth: currentHealth,
-        reason,
-        sentAt: new Date(),
-        notificationType: shouldNotify ? "push" : undefined,
-        status: shouldNotify ? "pending" : "skipped",
-      });
+        // NotificationLog 먼저 생성 (알림 발송 여부와 무관)
+        const notificationLog = await this.notificationLogsService.create({
+          jobId,
+          prevHealth,
+          nextHealth: currentHealth,
+          reason,
+          sentAt: new Date(),
+          notificationType: shouldNotify ? "push" : undefined,
+          status: shouldNotify ? "pending" : "skipped",
+        });
 
-      if (shouldNotify) {
-        // 알림 발송
-        try {
-          const result = await this.sendNotification(
-            notificationLog.id,
-            jobId,
-            job.name,
-            prevHealth,
-            currentHealth,
-            reason,
-          );
+        if (shouldNotify) {
+          // 알림 발송
+          try {
+            const result = await this.sendNotification(
+              notificationLog.id,
+              jobId,
+              job.name,
+              prevHealth,
+              currentHealth,
+              reason,
+            );
 
-          // NotificationLog 상태 업데이트
-          const notificationStatus = result.success ? "sent" : "failed";
-          const errorMessage = result.success ? null : "알림 발송 실패";
-          await this.notificationLogsService.updateStatus(
-            notificationLog.id,
-            notificationStatus,
-            result.recipientCount,
-            errorMessage,
-          );
-        } catch (error: unknown) {
-          // 알림 발송 중 에러 발생 시 실패로 기록
-          const errorMessage = error instanceof Error ? error.message : "Unknown error";
-          await this.notificationLogsService.updateStatus(
-            notificationLog.id,
-            "failed",
-            0,
-            errorMessage,
+            // NotificationLog 상태 업데이트
+            const notificationStatus = result.success ? "sent" : "failed";
+            const errorMessage = result.success ? null : "알림 발송 실패";
+            await this.notificationLogsService.updateStatus(
+              notificationLog.id,
+              notificationStatus,
+              result.recipientCount,
+              errorMessage,
+            );
+          } catch (error: unknown) {
+            // 알림 발송 중 에러 발생 시 실패로 기록
+            const errorMessage = error instanceof Error ? error.message : "Unknown error";
+            await this.notificationLogsService.updateStatus(
+              notificationLog.id,
+              "failed",
+              0,
+              errorMessage,
+            );
+          }
+
+          // Job의 알림 정보 업데이트
+          await this.jobsService.updateNotificationInfo(jobId, new Date(), currentHealth);
+        } else {
+          // 쿨다운으로 인해 스킵
+          this.logger.debug(
+            `알림 발송 스킵 (쿨다운): Job ${jobId} (${prevHealth} → ${currentHealth})`,
           );
         }
 
-        // Job의 알림 정보 업데이트
-        await this.jobsService.updateNotificationInfo(jobId, new Date(), currentHealth);
-      } else {
-        // 쿨다운으로 인해 스킵
-        this.logger.debug(
-          `알림 발송 스킵 (쿨다운): Job ${jobId} (${prevHealth} → ${currentHealth})`,
-        );
+        // Job의 lastHealth 업데이트
+        await this.jobsService.updateLastHealth(jobId, currentHealth);
       }
 
-      // Job의 lastHealth 업데이트
-      await this.jobsService.updateLastHealth(jobId, currentHealth);
-    }
-
-    return currentHealth;
+      return currentHealth;
+    });
   }
 
   /**

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { Repository, EntityManager } from "typeorm";
 import { Job } from "./entities/job.entity";
 import { CreateJobDto } from "./dto/create-job.dto";
 import { UpdateJobDto } from "./dto/update-job.dto";
@@ -147,9 +147,14 @@ export class JobsService {
   /**
    * Job 조회 (Lock용)
    * SELECT FOR UPDATE로 동시성 제어
+   * 트랜잭션 매니저가 제공되면 해당 트랜잭션 내에서 실행
    */
-  async findOneWithLock(jobId: string): Promise<Job> {
-    const job = await this.jobRepository
+  async findOneWithLock(jobId: string, manager?: EntityManager): Promise<Job> {
+    const repository = manager
+      ? manager.getRepository(Job)
+      : this.jobRepository;
+
+    const job = await repository
       .createQueryBuilder("job")
       .where("job.id = :id", { id: jobId })
       .setLock("pessimistic_write")
