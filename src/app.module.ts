@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
+import * as Joi from "joi";
 import { CommonModule } from "./common/common.module";
 import { JobsModule } from "./jobs/jobs.module";
 import { ExecutionsModule } from "./executions/executions.module";
@@ -26,12 +27,34 @@ import { HealthController } from "./health.controller";
       isGlobal: true,
       load: [databaseConfig, httpConfig, jwtConfig, healthConfig],
       envFilePath: [`.env.${process.env.NODE_ENV || "local"}`, ".env"],
+      validationSchema: Joi.object({
+        // JWT 필수 환경 변수
+        JWT_ACCESS_SECRET: Joi.string().required().messages({
+          "any.required": "JWT_ACCESS_SECRET 환경 변수가 필요합니다.",
+          "string.empty": "JWT_ACCESS_SECRET은 비어있을 수 없습니다.",
+        }),
+        JWT_REFRESH_SECRET: Joi.string().required().messages({
+          "any.required": "JWT_REFRESH_SECRET 환경 변수가 필요합니다.",
+          "string.empty": "JWT_REFRESH_SECRET은 비어있을 수 없습니다.",
+        }),
+        // 데이터베이스 필수 환경 변수
+        DB_HOST: Joi.string().required(),
+        DB_PORT: Joi.number().port().required(),
+        DB_USERNAME: Joi.string().required(),
+        DB_PASSWORD: Joi.string().required(),
+        DB_NAME: Joi.string().required(),
+      }),
+      validationOptions: {
+        allowUnknown: true, // 스키마에 정의되지 않은 환경 변수 허용
+        abortEarly: false, // 모든 검증 오류를 한 번에 표시
+      },
     }),
     // TypeORM: 데이터베이스 연결
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
-        const dbConfig = configService.get<ReturnType<typeof databaseConfig>>("database");
+        const dbConfig =
+          configService.get<ReturnType<typeof databaseConfig>>("database");
         if (!dbConfig) {
           throw new Error("Database config is not defined");
         }

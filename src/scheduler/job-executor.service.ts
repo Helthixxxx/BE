@@ -42,7 +42,11 @@ export class JobExecutorService {
 
     try {
       // Execution 생성 (executionKey unique constraint로 중복 실행 방지)
-      const execution = await this.executionsService.create(job.id, scheduledAt, startedAt);
+      const execution = await this.executionsService.create(
+        job.id,
+        scheduledAt,
+        startedAt,
+      );
       executionId = execution.id;
 
       // HTTP 호출
@@ -67,11 +71,14 @@ export class JobExecutorService {
         `Job ${job.id} (${job.name}) executed successfully. Execution ID: ${executionId}`,
       );
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
 
       // Execution 생성 실패 (중복 실행 등)
       if (error instanceof Error && errorMessage.includes("already exists")) {
-        this.logger.warn(`Job ${job.id} (${job.name}) execution skipped: ${errorMessage}`);
+        this.logger.warn(
+          `Job ${job.id} (${job.name}) execution skipped: ${errorMessage}`,
+        );
         return;
       }
 
@@ -89,7 +96,9 @@ export class JobExecutorService {
         );
       }
 
-      this.logger.error(`Job ${job.id} (${job.name}) execution failed: ${errorMessage}`);
+      this.logger.error(
+        `Job ${job.id} (${job.name}) execution failed: ${errorMessage}`,
+      );
     }
   }
 
@@ -115,10 +124,16 @@ export class JobExecutorService {
       let response: AxiosResponse<unknown>;
       if (job.method === HttpMethod.POST) {
         response = await firstValueFrom(
-          this.httpService.post<unknown>(job.url, job.body || {}, config as never),
+          this.httpService.post<unknown>(
+            job.url,
+            job.body || {},
+            config as never,
+          ),
         );
       } else {
-        response = await firstValueFrom(this.httpService.get<unknown>(job.url, config as never));
+        response = await firstValueFrom(
+          this.httpService.get<unknown>(job.url, config as never),
+        );
       }
 
       const httpStatus = response.status;
@@ -142,7 +157,8 @@ export class JobExecutorService {
         responseSnippet,
       };
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
 
       // error 객체에서 code 추출 (타입 안전하게)
       let errorCode: string | undefined;
@@ -163,7 +179,11 @@ export class JobExecutorService {
       }
 
       // 네트워크 에러 체크
-      if (errorCode === "ECONNREFUSED" || errorCode === "ENOTFOUND" || errorCode === "ECONNRESET") {
+      if (
+        errorCode === "ECONNREFUSED" ||
+        errorCode === "ENOTFOUND" ||
+        errorCode === "ECONNRESET"
+      ) {
         return {
           success: false,
           httpStatus: null,

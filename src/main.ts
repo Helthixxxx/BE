@@ -27,17 +27,33 @@ async function bootstrap() {
     next();
   });
 
+  // 민감한 헤더 마스킹 유틸리티 함수
+  const maskSensitiveHeaders = (
+    headers: Record<string, unknown>,
+  ): Record<string, unknown> => {
+    const sensitiveHeaders = ["authorization", "cookie", "x-api-key"];
+    const masked: Record<string, unknown> = { ...headers };
+
+    for (const key of Object.keys(masked)) {
+      if (sensitiveHeaders.includes(key.toLowerCase())) {
+        masked[key] = "***";
+      }
+    }
+
+    return masked;
+  };
+
   // 에러 핸들링 미들웨어 (CORS 에러 등 미들웨어 레벨 에러 로깅)
   app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
     const requestId = (req as RequestWithId).requestId || "unknown";
 
-    // CORS 에러 등 미들웨어 레벨 에러 로깅
+    // CORS 에러 등 미들웨어 레벨 에러 로깅 (민감 정보 마스킹)
     logger.error({
       type: "MIDDLEWARE_ERROR",
       requestId,
       method: req.method,
       url: req.url,
-      headers: req.headers,
+      headers: maskSensitiveHeaders(req.headers as Record<string, unknown>),
       error: {
         name: err.name,
         message: err.message,
@@ -89,7 +105,7 @@ async function bootstrap() {
       }
       // 그 외는 거부 (로깅 포함)
       const error = new Error("CORS 정책에 의해 차단되었습니다.");
-      console.error({
+      logger.warn({
         type: "CORS_ERROR",
         origin,
         allowedOrigins,
@@ -153,10 +169,11 @@ async function bootstrap() {
 
   const port = process.env.PORT || 8080;
   await app.listen(port);
-  console.log(`Application is running on: http://localhost:${port}`);
-  console.log(`Swagger documentation: http://localhost:${port}${swaggerUrl}`);
+  logger.log(`Application is running on: http://localhost:${port}`);
+  logger.log(`Swagger documentation: http://localhost:${port}${swaggerUrl}`);
 }
 void bootstrap().catch((error) => {
-  console.error("Failed to start application:", error);
+  const logger = new Logger("Bootstrap");
+  logger.error("Failed to start application:", error);
   process.exit(1);
 });
