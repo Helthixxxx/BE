@@ -85,14 +85,9 @@ async function bootstrap() {
   const allowedOrigins = [
     "http://localhost:3000",
     "http://localhost:3001",
+    "http://localhost:3002",
     "https://shm-admin.nextdot.kr",
     "https://shm-api.nextdot.kr",
-    // 환경변수에서 추가 origin 허용 (쉼표로 구분)
-    ...(process.env.CORS_ALLOWED_ORIGINS
-      ? process.env.CORS_ALLOWED_ORIGINS.split(",").map((origin) =>
-          origin.trim(),
-        )
-      : []),
   ];
 
   app.enableCors({
