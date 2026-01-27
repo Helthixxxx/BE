@@ -107,6 +107,7 @@ async function bootstrap() {
     "http://localhost:3002",
     "https://shm-admin.nextdot.kr",
     "https://shm-api.nextdot.kr",
+    "https://admin.nextdot.kr",
   ];
 
   app.enableCors({
