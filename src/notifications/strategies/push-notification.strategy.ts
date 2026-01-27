@@ -53,7 +53,14 @@ export class PushNotificationStrategy implements NotificationStrategy {
    * 알림 발송
    */
   async send(payload: NotificationPayload): Promise<NotificationResult> {
-    const { notificationLogId, jobId, jobName, prevHealth, nextHealth, reason } = payload;
+    const {
+      notificationLogId,
+      jobId,
+      jobName,
+      prevHealth,
+      nextHealth,
+      reason,
+    } = payload;
 
     // 1. Job 조회하여 userId 확인
     const job = await this.jobRepository.findOne({ where: { id: jobId } });
@@ -119,7 +126,11 @@ export class PushNotificationStrategy implements NotificationStrategy {
       );
 
       // 5. 응답 처리 및 NotificationRecipient 기록
-      result = await this.processResponse(devices, response.data.data, notificationLogId);
+      result = await this.processResponse(
+        devices,
+        response.data.data,
+        notificationLogId,
+      );
     } catch (error) {
       this.logger.error(
         `Expo Push API 호출 실패: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -164,7 +175,8 @@ export class PushNotificationStrategy implements NotificationStrategy {
           await recipientRepo.save(recipient);
         } else {
           // 실패한 경우
-          const errorMessage = ticket.message || ticket.details?.error || "Unknown error";
+          const errorMessage =
+            ticket.message || ticket.details?.error || "Unknown error";
           errors.push({
             recipientId: device.id,
             errorMessage: String(errorMessage),
@@ -209,7 +221,8 @@ export class PushNotificationStrategy implements NotificationStrategy {
     notificationLogId: string,
     error: unknown,
   ): Promise<NotificationResult> {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
 
     // 모든 Device에 대해 실패로 기록 (배치 저장)
     await this.dataSource.transaction(async (manager) => {
@@ -243,7 +256,10 @@ export class PushNotificationStrategy implements NotificationStrategy {
   /**
    * 알림 제목 생성
    */
-  private getNotificationTitle(prevHealth: string | null, nextHealth: string): string {
+  private getNotificationTitle(
+    prevHealth: string | null,
+    nextHealth: string,
+  ): string {
     if (nextHealth === "FAILED") {
       return "🚨 서비스 장애 발생";
     } else if (prevHealth === "FAILED" && nextHealth === "NORMAL") {

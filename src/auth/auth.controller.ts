@@ -1,16 +1,37 @@
-import { Controller, Post, Get, Body, HttpCode, HttpStatus, UseGuards } from "@nestjs/common";
-import { ApiTags, ApiOperation, ApiBody, ApiBearerAuth, ApiResponse } from "@nestjs/swagger";
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  HttpCode,
+  HttpStatus,
+  UseGuards,
+} from "@nestjs/common";
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBody,
+  ApiBearerAuth,
+  ApiResponse,
+} from "@nestjs/swagger";
 import { AuthService } from "./auth.service";
 import { SignupDto } from "./dto/signup.dto";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshDto } from "./dto/refresh.dto";
 import { LogoutDto } from "./dto/logout.dto";
-import { AuthResponseDto, RefreshResponseDto, LogoutResponseDto } from "./dto/auth-response.dto";
+import {
+  AuthResponseDto,
+  RefreshResponseDto,
+  LogoutResponseDto,
+} from "./dto/auth-response.dto";
 import { MeResponseDto } from "./dto/me-response.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { CurrentUser } from "./decorators/current-user.decorator";
 import { User } from "../users/entities/user.entity";
-import { SuccessResponseDto, ErrorResponseDto } from "../common/dto/response.dto";
+import {
+  SuccessResponseDto,
+  ErrorResponseDto,
+} from "../common/dto/response.dto";
 
 /**
  * AuthController
@@ -193,7 +214,8 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: "Access Token 갱신",
-    description: "Refresh Token으로 새로운 Access Token과 Refresh Token을 발급받습니다.",
+    description:
+      "Refresh Token으로 새로운 Access Token과 Refresh Token을 발급받습니다.",
   })
   @ApiBody({ type: RefreshDto })
   @ApiResponse({

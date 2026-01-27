@@ -12,9 +12,9 @@ export class LoginDto {
     pattern: "^[a-zA-Z0-9@]{3,}$",
   })
   @IsString()
-  @MinLength(3, { message: "providerId는 최소 3자 이상이어야 합니다." })
+  @MinLength(3, { message: "아이디는 최소 3자 이상이어야 합니다." })
   @Matches(/^[a-zA-Z0-9@]{3,}$/, {
-    message: "providerId는 영문, 숫자, @만 사용 가능합니다.",
+    message: "아이디는 영문, 숫자, @만 사용 가능합니다.",
   })
   providerId: string;
 
