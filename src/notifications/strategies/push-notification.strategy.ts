@@ -10,6 +10,7 @@ import {
 } from "../interfaces/notification-strategy.interface";
 import { Device } from "../../devices/entities/device.entity";
 import { NotificationRecipient } from "../../notification-recipients/entities/notification-recipient.entity";
+import { Job } from "../../jobs/entities/job.entity";
 
 /**
  * Expo Push API 응답 타입
@@ -43,6 +44,8 @@ export class PushNotificationStrategy implements NotificationStrategy {
     private readonly deviceRepository: Repository<Device>,
     @InjectRepository(NotificationRecipient)
     private readonly recipientRepository: Repository<NotificationRecipient>,
+    @InjectRepository(Job)
+    private readonly jobRepository: Repository<Job>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -52,13 +55,30 @@ export class PushNotificationStrategy implements NotificationStrategy {
   async send(payload: NotificationPayload): Promise<NotificationResult> {
     const { notificationLogId, jobId, jobName, prevHealth, nextHealth, reason } = payload;
 
-    // 1. 활성화된 Device 목록 조회
+    // 1. Job 조회하여 userId 확인
+    const job = await this.jobRepository.findOne({ where: { id: jobId } });
+
+    // Job의 userId가 null인 경우 알림 발송 안 함
+    if (!job || !job.userId) {
+      this.logger.warn(
+        `Job ${jobId}의 userId가 없어 알림 발송을 건너뜁니다. (userId: ${job?.userId ?? "null"})`,
+      );
+      return {
+        success: true,
+        recipientCount: 0,
+        errors: [],
+      };
+    }
+
+    // 2. Job을 생성한 사용자의 활성화된 Device 목록 조회
     const devices = await this.deviceRepository.find({
-      where: { isActive: true },
+      where: { isActive: true, userId: job.userId },
     });
 
     if (devices.length === 0) {
-      this.logger.warn("발송할 활성화된 Device가 없습니다.");
+      this.logger.warn(
+        `Job ${jobId}의 사용자(userId: ${job.userId})에게 발송할 활성화된 Device가 없습니다.`,
+      );
       return {
         success: true,
         recipientCount: 0,

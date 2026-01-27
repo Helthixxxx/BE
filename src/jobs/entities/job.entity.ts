@@ -5,12 +5,15 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   OneToMany,
+  ManyToOne,
+  JoinColumn,
   Index,
 } from "typeorm";
 import { Health } from "../../common/enums/health.enum";
 import { HttpMethod } from "../../common/enums/http-method.enum";
 import { Execution } from "../../executions/entities/execution.entity";
 import { NotificationLog } from "../../notification-logs/entities/notification-log.entity";
+import { User } from "../../users/entities/user.entity";
 
 /**
  * Job Entity
@@ -57,6 +60,19 @@ export class Job {
     name: "last_health",
   })
   lastHealth: Health | null;
+
+  /**
+   * Job을 생성한 사용자 ID
+   */
+  @Column({ type: "uuid", name: "user_id", nullable: true })
+  userId: string | null;
+
+  /**
+   * Job을 생성한 사용자 (관계)
+   */
+  @ManyToOne(() => User, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({ name: "user_id" })
+  user: User | null;
 
   /**
    * 마지막 알림 발송 시각

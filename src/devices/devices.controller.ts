@@ -55,8 +55,8 @@ export class DevicesController {
     @Body() createDeviceDto: CreateDeviceDto,
     @Request() req: RequestWithOptionalUser,
   ): Promise<DeviceResponseDto> {
-    // JWT 인증이 있는 경우 userId 사용, 없으면 null
-    const userId = req.user?.id || null;
+    // 우선순위: JWT 인증된 userId > DTO의 userId > null
+    const userId = req.user?.id || createDeviceDto.userId || null;
     return await this.devicesService.upsert(createDeviceDto, userId);
   }
 

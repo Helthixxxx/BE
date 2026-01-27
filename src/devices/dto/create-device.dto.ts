@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, Matches } from "class-validator";
+import { IsString, IsOptional, IsEnum, Matches, IsUUID } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 /**
@@ -19,6 +19,18 @@ export class CreateDeviceDto {
     message: "유효한 Expo Push Token 형식이 아닙니다.",
   })
   pushToken: string;
+
+  /**
+   * 사용자 ID (선택적)
+   * DB에 저장 또는 업데이트 시 사용
+   */
+  @ApiPropertyOptional({
+    description: "사용자 ID",
+    example: "123e4567-e89b-12d3-a456-426614174000",
+  })
+  @IsOptional()
+  @IsUUID()
+  userId?: string;
 
   /**
    * 앱에서 생성한 기기 고유 ID (선택적)

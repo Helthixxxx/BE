@@ -35,11 +35,15 @@ import {
   JobWithHealthResponseDto,
   HealthResponseDto,
 } from "./dto/job-response.dto";
-import { SuccessResponseDto, ErrorResponseDto } from "../common/dto/response.dto";
+import {
+  SuccessResponseDto,
+  ErrorResponseDto,
+} from "../common/dto/response.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { Roles } from "../auth/decorators/roles.decorator";
-import { UserRole } from "../users/entities/user.entity";
+import { CurrentUser } from "../auth/decorators/current-user.decorator";
+import { UserRole, User } from "../users/entities/user.entity";
 import { HealthSummaryResponseDto } from "../health/dto/health-summary-response.dto";
 
 /**
@@ -158,8 +162,8 @@ export class JobsController {
       },
     },
   })
-  async create(@Body() createJobDto: CreateJobDto) {
-    return await this.jobsService.create(createJobDto);
+  async create(@Body() createJobDto: CreateJobDto, @CurrentUser() user: User) {
+    return await this.jobsService.create(createJobDto, user.id);
   }
 
   @Get()
@@ -273,7 +277,9 @@ export class JobsController {
       // 각 Job의 Health 계산
       const jobsWithHealth = await Promise.all(
         jobs.map(async (job) => {
-          const calculatedHealth = await this.healthService.calculateHealth(job.id);
+          const calculatedHealth = await this.healthService.calculateHealth(
+            job.id,
+          );
           return {
             ...job,
             health: calculatedHealth,

@@ -24,8 +24,9 @@ export class JobsService {
    * 생성일시(createdAt)로부터 정확히 스케줄 시간을 더함
    * 트랜잭션으로 일관성 보장
    * @param createJobDto Job 생성 데이터
+   * @param userId 호출자의 사용자 ID
    */
-  async create(createJobDto: CreateJobDto): Promise<Job> {
+  async create(createJobDto: CreateJobDto, userId: string): Promise<Job> {
     const isActive = createJobDto.isActive ?? true;
 
     return await this.dataSource.transaction(async (manager) => {
@@ -34,6 +35,7 @@ export class JobsService {
       const job = jobRepo.create({
         ...createJobDto,
         isActive,
+        userId,
         nextRunAt: null, // 일단 null로 설정, 저장 후 createdAt 기준으로 계산
         lastHealth: null,
       });
@@ -42,7 +44,10 @@ export class JobsService {
 
       // 저장 후 createdAt이 설정되므로, 이를 기준으로 nextRunAt 계산
       if (isActive && savedJob.createdAt) {
-        const nextRunAt = this.calculateNextRunAt(savedJob.createdAt, savedJob.scheduleMinutes);
+        const nextRunAt = this.calculateNextRunAt(
+          savedJob.createdAt,
+          savedJob.scheduleMinutes,
+        );
         savedJob.nextRunAt = nextRunAt;
         return await jobRepo.save(savedJob);
       }
@@ -156,7 +161,9 @@ export class JobsService {
    * 트랜잭션 매니저가 제공되면 해당 트랜잭션 내에서 실행
    */
   async findOneWithLock(jobId: string, manager?: EntityManager): Promise<Job> {
-    const repository = manager ? manager.getRepository(Job) : this.jobRepository;
+    const repository = manager
+      ? manager.getRepository(Job)
+      : this.jobRepository;
 
     const job = await repository
       .createQueryBuilder("job")
