@@ -7,6 +7,7 @@ import { AppModule } from "./app.module";
 import { GlobalExceptionFilter } from "./common/filters/global-exception.filter";
 import { ResponseEnvelopeInterceptor } from "./common/interceptors/response-envelope.interceptor";
 import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
+import { MetricsInterceptor } from "./common/metrics/metrics.interceptor";
 
 /**
  * Request 타입 확장 (requestId 포함)
@@ -86,6 +87,12 @@ async function bootstrap() {
     "http://localhost:3001",
     "https://shm-admin.nextdot.kr",
     "https://shm-api.nextdot.kr",
+    // 환경변수에서 추가 origin 허용 (쉼표로 구분)
+    ...(process.env.CORS_ALLOWED_ORIGINS
+      ? process.env.CORS_ALLOWED_ORIGINS.split(",").map((origin) =>
+          origin.trim(),
+        )
+      : []),
   ];
 
   app.enableCors({
@@ -130,12 +137,16 @@ async function bootstrap() {
     }),
   );
 
-  // 전역 Exception Filter 설정
-  app.useGlobalFilters(new GlobalExceptionFilter());
+  // 전역 Exception Filter 설정 (DI 컨테이너에서 가져오기)
+  const globalExceptionFilter = app.get(GlobalExceptionFilter);
+  app.useGlobalFilters(globalExceptionFilter);
 
-  // 전역 Interceptor 설정 (로깅을 먼저, 그 다음 응답 envelope)
+  // 전역 Interceptor 설정 (DI 컨테이너에서 가져오기)
+  const loggingInterceptor = app.get(LoggingInterceptor);
+  const metricsInterceptor = app.get(MetricsInterceptor);
   app.useGlobalInterceptors(
-    new LoggingInterceptor(),
+    metricsInterceptor, // 메트릭 수집을 먼저
+    loggingInterceptor,
     new ResponseEnvelopeInterceptor(),
   );
 
@@ -148,6 +159,7 @@ async function bootstrap() {
     .addTag("auth", "인증 API")
     .addTag("jobs", "Job 관리 API")
     .addTag("executions", "Execution 조회 API")
+    .addTag("metrics", "메트릭 조회 API")
     .addBearerAuth(
       {
         type: "http",

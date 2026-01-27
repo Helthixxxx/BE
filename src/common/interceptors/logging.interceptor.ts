@@ -1,7 +1,8 @@
-import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Logger } from "@nestjs/common";
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from "@nestjs/common";
 import { Observable } from "rxjs";
 import { tap } from "rxjs/operators";
 import { Request, Response } from "express";
+import { PinoLogger } from "nestjs-pino";
 
 /**
  * Request 타입 확장 (requestId 포함)
@@ -17,10 +18,11 @@ interface RequestWithId extends Request {
  * - 헤더 정보 제외
  * - Health check는 간소화
  * - meta 포함, 배열 전체 표시
+ * - Pino를 사용한 구조화된 로깅
  */
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
-  private readonly logger = new Logger(LoggingInterceptor.name);
+  constructor(private readonly logger: PinoLogger) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const request = context.switchToHttp().getRequest<RequestWithId>();
@@ -29,6 +31,7 @@ export class LoggingInterceptor implements NestInterceptor {
     const url = request.url;
     const query = request.query as Record<string, unknown>;
     const body = request.body as unknown;
+    const requestId = request.requestId;
 
     // 요청 시작 시간 기록
     const startTime = Date.now();
@@ -49,18 +52,19 @@ export class LoggingInterceptor implements NestInterceptor {
             data,
             responseTime,
             isHealthCheck,
+            requestId,
           );
         },
         error: (error) => {
           const responseTime = Date.now() - startTime;
-          this.logError(method, url, query, body, error, responseTime);
+          this.logError(method, url, query, body, error, responseTime, requestId);
         },
       }),
     );
   }
 
   /**
-   * 요청/응답 통합 로깅 (여러 줄로 가독성 있게 표시)
+   * 요청/응답 통합 로깅 (구조화된 JSON 로깅)
    */
   private logRequestResponse(
     method: string,
@@ -71,10 +75,21 @@ export class LoggingInterceptor implements NestInterceptor {
     data: unknown,
     responseTime: number,
     isHealthCheck: boolean,
+    requestId?: string,
   ): void {
     // Health check는 간소화
     if (isHealthCheck) {
-      this.logger.log(`→ ${method} ${url} | ${statusCode} | ${responseTime}ms`);
+      this.logger.info(
+        {
+          type: "HTTP_REQUEST",
+          method,
+          url,
+          statusCode,
+          responseTime,
+          requestId,
+        },
+        `${method} ${url} | ${statusCode} | ${responseTime}ms`,
+      );
       return;
     }
 
@@ -88,28 +103,37 @@ export class LoggingInterceptor implements NestInterceptor {
       fullUrl = `${url}?${queryString}`;
     }
 
-    // 상태 코드에 따른 이모지
-    const statusEmoji = statusCode >= 500 ? "❌" : statusCode >= 400 ? "⚠️" : "✅";
+    // 구조화된 로그 객체 생성
+    const logData: Record<string, unknown> = {
+      type: "HTTP_REQUEST",
+      method,
+      url: fullUrl,
+      statusCode,
+      responseTime,
+      requestId,
+    };
 
-    // 요청 정보 로깅
-    let requestInfo = `${statusEmoji} ${method} ${fullUrl} | ${statusCode} | ${responseTime}ms`;
-
-    // 요청 바디가 있으면 표시
+    // 요청 바디가 있으면 추가 (민감 정보 마스킹)
     if (body && typeof body === "object" && Object.keys(body).length > 0) {
-      const maskedBody = this.maskSensitiveFields(body);
-      const bodyJson = JSON.stringify(maskedBody, null, 2);
-      requestInfo += `\nRequest Body:\n${bodyJson}`;
+      logData.requestBody = this.maskSensitiveFields(body);
     }
 
-    // 응답 데이터 포맷팅 (meta 포함, 배열 전체 표시)
+    // 응답 데이터 추가 (민감 정보 마스킹)
     const maskedData = this.maskSensitiveFields(data);
-    const responseJson = JSON.stringify(maskedData, null, 2);
+    logData.response = maskedData;
 
-    this.logger.log(`${requestInfo}\nResponse:\n${responseJson}`);
+    // 로그 레벨 결정
+    if (statusCode >= 500) {
+      this.logger.error(logData, `${method} ${fullUrl} | ${statusCode} | ${responseTime}ms`);
+    } else if (statusCode >= 400) {
+      this.logger.warn(logData, `${method} ${fullUrl} | ${statusCode} | ${responseTime}ms`);
+    } else {
+      this.logger.info(logData, `${method} ${fullUrl} | ${statusCode} | ${responseTime}ms`);
+    }
   }
 
   /**
-   * 에러 로깅
+   * 에러 로깅 (구조화된 JSON 로깅)
    */
   private logError(
     method: string,
@@ -118,6 +142,7 @@ export class LoggingInterceptor implements NestInterceptor {
     body: unknown,
     error: unknown,
     responseTime: number,
+    requestId?: string,
   ): void {
     // URL에 쿼리 파라미터 추가
     let fullUrl = url;
@@ -129,30 +154,44 @@ export class LoggingInterceptor implements NestInterceptor {
       fullUrl = `${url}?${queryString}`;
     }
 
-    // 요청 바디가 있으면 표시
-    let requestInfo = `❌ ${method} ${fullUrl} | ERROR | ${responseTime}ms`;
-    if (body && typeof body === "object" && Object.keys(body).length > 0) {
-      const maskedBody = this.maskSensitiveFields(body);
-      const bodyJson = JSON.stringify(maskedBody, null, 2);
-      requestInfo += `\nRequest Body:\n${bodyJson}`;
-    }
-
     const errorObj = error as {
       name?: string;
       message?: string;
       stack?: string;
       response?: unknown;
+      statusCode?: number;
     };
 
-    const errorDetails: Record<string, unknown> = {};
-    if (errorObj?.name) errorDetails.name = errorObj.name;
-    if (errorObj?.message) errorDetails.message = errorObj.message;
-    if (errorObj?.stack) errorDetails.stack = errorObj.stack;
-    if (errorObj?.response) errorDetails.response = errorObj.response;
+    // 구조화된 에러 로그 객체 생성
+    const logData: Record<string, unknown> = {
+      type: "HTTP_ERROR",
+      method,
+      url: fullUrl,
+      responseTime,
+      requestId,
+      error: {
+        name: errorObj?.name || "Unknown",
+        message: errorObj?.message || String(error),
+        stack: errorObj?.stack,
+      },
+    };
 
-    const errorJson = JSON.stringify(errorDetails, null, 2);
+    // 요청 바디가 있으면 추가 (민감 정보 마스킹)
+    if (body && typeof body === "object" && Object.keys(body).length > 0) {
+      logData.requestBody = this.maskSensitiveFields(body);
+    }
 
-    this.logger.error(`${requestInfo}\nError:\n${errorJson}`);
+    // HTTP 상태 코드가 있으면 추가
+    if (errorObj?.statusCode) {
+      logData.statusCode = errorObj.statusCode;
+    }
+
+    // 에러 응답이 있으면 추가
+    if (errorObj?.response) {
+      logData.errorResponse = errorObj.response;
+    }
+
+    this.logger.error(logData, `${method} ${fullUrl} | ERROR | ${responseTime}ms`);
   }
 
   /**

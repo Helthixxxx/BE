@@ -7,16 +7,8 @@ import {
   ParseIntPipe,
   DefaultValuePipe,
 } from "@nestjs/common";
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiQuery,
-} from "@nestjs/swagger";
-import {
-  SuccessResponseDto,
-  ErrorResponseDto,
-} from "../common/dto/response.dto";
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from "@nestjs/swagger";
+import { SuccessResponseDto, ErrorResponseDto } from "../common/dto/response.dto";
 
 /**
  * FakeApiResponseDto

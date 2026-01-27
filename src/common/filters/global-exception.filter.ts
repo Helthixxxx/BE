@@ -6,10 +6,10 @@ import {
   HttpStatus,
   UnauthorizedException,
   ForbiddenException,
-  Logger,
 } from "@nestjs/common";
 import { Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
+import { PinoLogger } from "nestjs-pino";
 
 /**
  * Request 타입 확장 (requestId 포함)
@@ -32,10 +32,11 @@ interface HttpExceptionResponse {
  * GlobalExceptionFilter
  * 모든 예외를 meta + error 형태의 envelope로 통일
  * ValidationPipe에서 발생한 에러는 details에 필드별 에러를 포함
+ * Pino를 사용한 구조화된 로깅
  */
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
-  private readonly logger = new Logger(GlobalExceptionFilter.name);
+  constructor(private readonly logger: PinoLogger) {}
 
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
@@ -127,7 +128,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   }
 
   /**
-   * 에러 상세 로깅
+   * 에러 상세 로깅 (구조화된 JSON 로깅)
    */
   private logError(
     request: RequestWithId,
@@ -148,7 +149,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const maskedHeaders = this.maskSensitiveHeaders(headers);
     const maskedBody = this.maskSensitiveFields(body);
 
-    const errorLog = {
+    const errorLog: Record<string, unknown> = {
       type: "EXCEPTION",
       requestId,
       method,
@@ -156,7 +157,6 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       statusCode: status,
       errorCode,
       message,
-      ...(details && { details }),
       request: {
         headers: maskedHeaders,
         query: Object.keys(query).length > 0 ? query : undefined,
@@ -167,14 +167,18 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         message: exception instanceof Error ? exception.message : String(exception),
         stack: exception instanceof Error ? exception.stack : undefined,
       },
-      timestamp: new Date().toISOString(),
     };
+
+    // details가 있으면 추가
+    if (details) {
+      errorLog.details = details;
+    }
 
     // 500 에러는 error 레벨로, 그 외는 warn 레벨로 로깅
     if (status >= 500) {
-      this.logger.error(JSON.stringify(errorLog, null, 2));
+      this.logger.error(errorLog, `Exception: ${errorCode} - ${message}`);
     } else {
-      this.logger.warn(JSON.stringify(errorLog, null, 2));
+      this.logger.warn(errorLog, `Exception: ${errorCode} - ${message}`);
     }
   }
 

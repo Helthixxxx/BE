@@ -6,6 +6,7 @@ import { ConfigType } from "@nestjs/config";
 import { JobsService } from "../jobs/jobs.service";
 import { ExecutionsService } from "../executions/executions.service";
 import { HealthService } from "../health/health.service";
+import { MetricsService } from "../common/metrics/metrics.service";
 import { Job } from "../jobs/entities/job.entity";
 import { ErrorType } from "../common/enums/error-type.enum";
 import { HttpMethod } from "../common/enums/http-method.enum";
@@ -25,6 +26,7 @@ export class JobExecutorService {
     private readonly jobsService: JobsService,
     private readonly executionsService: ExecutionsService,
     private readonly healthService: HealthService,
+    private readonly metricsService: MetricsService,
     @Inject(httpConfig.KEY)
     private readonly httpConfiguration: ConfigType<typeof httpConfig>,
   ) {}
@@ -54,6 +56,7 @@ export class JobExecutorService {
 
       // Execution 결과 업데이트
       const finishedAt = new Date();
+      const duration = finishedAt.getTime() - startedAt.getTime();
       await this.executionsService.updateResult(
         executionId,
         finishedAt,
@@ -62,6 +65,13 @@ export class JobExecutorService {
         result.errorType,
         result.errorMessage,
         result.responseSnippet,
+      );
+
+      // 메트릭 수집: Job 실행 기록
+      this.metricsService.recordJobExecution(
+        job.id,
+        result.success ? "success" : "failed",
+        duration,
       );
 
       // Health 업데이트 및 NotificationLog 기록
@@ -85,6 +95,7 @@ export class JobExecutorService {
       // Execution이 생성된 경우 결과 업데이트
       if (executionId) {
         const finishedAt = new Date();
+        const duration = finishedAt.getTime() - startedAt.getTime();
         await this.executionsService.updateResult(
           executionId,
           finishedAt,
@@ -94,6 +105,9 @@ export class JobExecutorService {
           errorMessage,
           null,
         );
+
+        // 메트릭 수집: 실패한 Job 실행 기록
+        this.metricsService.recordJobExecution(job.id, "failed", duration);
       }
 
       this.logger.error(

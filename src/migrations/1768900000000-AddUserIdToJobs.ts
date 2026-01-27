@@ -1,10 +1,4 @@
-import {
-  MigrationInterface,
-  QueryRunner,
-  TableColumn,
-  TableIndex,
-  TableForeignKey,
-} from "typeorm";
+import { MigrationInterface, QueryRunner, TableColumn, TableIndex, TableForeignKey } from "typeorm";
 
 /**
  * AddUserIdToJobs Migration
@@ -63,9 +57,7 @@ export class AddUserIdToJobs1768900000000 implements MigrationInterface {
     // 롤백: user_id 외래키, 인덱스, 컬럼 제거
     const table = await queryRunner.getTable("jobs");
 
-    const hasUserIdForeignKey = table?.foreignKeys.some(
-      (fk) => fk.name === "FK_jobs_user_id",
-    );
+    const hasUserIdForeignKey = table?.foreignKeys.some((fk) => fk.name === "FK_jobs_user_id");
 
     if (hasUserIdForeignKey) {
       await queryRunner.dropForeignKey("jobs", "FK_jobs_user_id");
