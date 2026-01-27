@@ -153,10 +153,13 @@ export class PushNotificationStrategy implements NotificationStrategy {
   ): Promise<NotificationResult> {
     const errors: Array<{ recipientId: string; errorMessage: string }> = [];
     let successCount = 0;
+    const deactivatedUserIds = new Set<string>(); // 비활성화된 Device의 userId 추적
 
     // 트랜잭션 내에서 NotificationRecipient 기록
     await this.dataSource.transaction(async (manager) => {
       const recipientRepo = manager.getRepository(NotificationRecipient);
+      const deviceRepo = manager.getRepository(Device);
+      const jobRepo = manager.getRepository(Job);
 
       for (let i = 0; i < devices.length; i++) {
         const device = devices[i];
@@ -188,8 +191,13 @@ export class PushNotificationStrategy implements NotificationStrategy {
             errorMessage.includes("InvalidCredentials")
           ) {
             device.isActive = false;
-            await manager.getRepository(Device).save(device);
+            await deviceRepo.save(device);
             this.logger.warn(`Device ${device.id} 비활성화: ${errorMessage}`);
+
+            // userId가 있는 경우 추적
+            if (device.userId) {
+              deactivatedUserIds.add(device.userId);
+            }
           }
 
           // 실패한 경우 NotificationRecipient 기록
@@ -201,6 +209,33 @@ export class PushNotificationStrategy implements NotificationStrategy {
             errorMessage: String(errorMessage),
           });
           await recipientRepo.save(recipient);
+        }
+      }
+
+      // 비활성화된 Device의 사용자들에 대해 활성 Device가 남아있는지 확인
+      for (const userId of deactivatedUserIds) {
+        const activeDeviceCount = await deviceRepo.count({
+          where: { userId, isActive: true },
+        });
+
+        // 활성 Device가 하나도 없으면 해당 사용자의 모든 Job 비활성화
+        if (activeDeviceCount === 0) {
+          const deactivatedJobsCount = await jobRepo.update(
+            { userId, isActive: true },
+            {
+              isActive: false,
+              nextRunAt: null,
+            },
+          );
+
+          if (
+            deactivatedJobsCount.affected &&
+            deactivatedJobsCount.affected > 0
+          ) {
+            this.logger.warn(
+              `사용자 ${userId}의 모든 활성 Device가 비활성화되어 ${deactivatedJobsCount.affected}개의 Job을 비활성화했습니다.`,
+            );
+          }
         }
       }
     });
