@@ -259,6 +259,7 @@ export class JobsController {
     },
   })
   async findAll(
+    @CurrentUser() user: User,
     @Query("includeHealth", new DefaultValuePipe(false), ParseBoolPipe)
     includeHealth: boolean,
     @Query("health", new ParseEnumPipe(Health, { optional: true }))
@@ -271,7 +272,11 @@ export class JobsController {
       );
     }
 
-    const jobs = await this.jobsService.findAll(includeHealth);
+    const jobs = await this.jobsService.findAll(
+      includeHealth,
+      user.id,
+      user.role,
+    );
 
     if (includeHealth) {
       // 각 Job의 Health 계산
@@ -438,6 +443,21 @@ export class JobsController {
     },
   })
   @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: "권한 없음 (해당 Job에 접근할 권한이 없음)",
+    type: ErrorResponseDto,
+    example: {
+      meta: {
+        requestId: "550e8400-e29b-41d4-a716-446655440000",
+        timestamp: "2026-01-19T11:47:42.123Z",
+      },
+      error: {
+        code: "FORBIDDEN",
+        message: "해당 Job에 접근할 권한이 없습니다.",
+      },
+    },
+  })
+  @ApiResponse({
     status: HttpStatus.INTERNAL_SERVER_ERROR,
     description: "서버 내부 에러",
     type: ErrorResponseDto,
@@ -452,8 +472,8 @@ export class JobsController {
       },
     },
   })
-  async findOne(@Param("id") id: string) {
-    return await this.jobsService.findOne(id);
+  async findOne(@Param("id") id: string, @CurrentUser() user: User) {
+    return await this.jobsService.findOne(id, user.id, user.role);
   }
 
   @Get(":id/health")
@@ -496,6 +516,21 @@ export class JobsController {
     },
   })
   @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: "권한 없음 (해당 Job에 접근할 권한이 없음)",
+    type: ErrorResponseDto,
+    example: {
+      meta: {
+        requestId: "550e8400-e29b-41d4-a716-446655440000",
+        timestamp: "2026-01-19T11:47:42.123Z",
+      },
+      error: {
+        code: "FORBIDDEN",
+        message: "해당 Job에 접근할 권한이 없습니다.",
+      },
+    },
+  })
+  @ApiResponse({
     status: HttpStatus.INTERNAL_SERVER_ERROR,
     description: "서버 내부 에러",
     type: ErrorResponseDto,
@@ -510,7 +545,9 @@ export class JobsController {
       },
     },
   })
-  async getHealth(@Param("id") id: string) {
+  async getHealth(@Param("id") id: string, @CurrentUser() user: User) {
+    // Job 접근 권한 확인
+    await this.jobsService.findOne(id, user.id, user.role);
     const health = await this.healthService.calculateHealth(id);
     return { health };
   }

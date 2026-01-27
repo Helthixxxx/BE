@@ -64,15 +64,15 @@ export class Job {
   /**
    * Job을 생성한 사용자 ID
    */
-  @Column({ type: "uuid", name: "user_id", nullable: true })
-  userId: string | null;
+  @Column({ type: "uuid", name: "user_id" })
+  userId: string;
 
   /**
    * Job을 생성한 사용자 (관계)
    */
-  @ManyToOne(() => User, { nullable: true, onDelete: "SET NULL" })
+  @ManyToOne(() => User, { onDelete: "CASCADE" })
   @JoinColumn({ name: "user_id" })
-  user: User | null;
+  user: User;
 
   /**
    * 마지막 알림 발송 시각

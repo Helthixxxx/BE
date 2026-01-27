@@ -1,10 +1,15 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, EntityManager, DataSource } from "typeorm";
 import { Job } from "./entities/job.entity";
 import { CreateJobDto } from "./dto/create-job.dto";
 import { UpdateJobDto } from "./dto/update-job.dto";
 import { Health } from "../common/enums/health.enum";
+import { UserRole } from "../users/entities/user.entity";
 
 /**
  * JobsService
@@ -57,10 +62,10 @@ export class JobsService {
   }
 
   /**
-   * 모든 Job 조회 (Admin용)
-   * includeHealth가 true이면 각 Job의 현재 Health 포함
+   * Job 목록 조회 (내부용, 권한 체크 없음)
+   * 서비스 간 호출 시 사용
    */
-  async findAll(includeHealth: boolean = false): Promise<Job[]> {
+  async findAllInternal(includeHealth: boolean = false): Promise<Job[]> {
     const jobs = await this.jobRepository.find({
       order: { createdAt: "DESC" },
     });
@@ -75,9 +80,41 @@ export class JobsService {
   }
 
   /**
-   * Job 단건 조회
+   * Job 목록 조회
+   * USER: 자신이 생성한 Job만 조회
+   * ADMIN: 모든 Job 조회
+   * includeHealth가 true이면 각 Job의 현재 Health 포함
    */
-  async findOne(id: string): Promise<Job> {
+  async findAll(
+    includeHealth: boolean = false,
+    userId: string,
+    userRole: UserRole,
+  ): Promise<Job[]> {
+    const queryBuilder = this.jobRepository
+      .createQueryBuilder("job")
+      .orderBy("job.createdAt", "DESC");
+
+    // USER 역할인 경우 자신이 생성한 Job만 조회
+    if (userRole !== UserRole.ADMIN) {
+      queryBuilder.where("job.userId = :userId", { userId });
+    }
+
+    const jobs = await queryBuilder.getMany();
+
+    if (includeHealth) {
+      // Health는 실시간 계산이므로 별도 로직 필요
+      // 여기서는 기본 구조만 제공하고, HealthService에서 계산
+      return jobs;
+    }
+
+    return jobs;
+  }
+
+  /**
+   * Job 단건 조회 (내부용, 권한 체크 없음)
+   * 서비스 간 호출 시 사용
+   */
+  async findOneInternal(id: string): Promise<Job> {
     const job = await this.jobRepository.findOne({ where: { id } });
 
     if (!job) {
@@ -88,10 +125,26 @@ export class JobsService {
   }
 
   /**
+   * Job 단건 조회
+   * USER: 자신이 생성한 Job만 조회 가능
+   * ADMIN: 모든 Job 조회 가능
+   */
+  async findOne(id: string, userId: string, userRole: UserRole): Promise<Job> {
+    const job = await this.findOneInternal(id);
+
+    // USER 역할인 경우 자신이 생성한 Job인지 확인
+    if (userRole !== UserRole.ADMIN && job.userId !== userId) {
+      throw new ForbiddenException("해당 Job에 접근할 권한이 없습니다.");
+    }
+
+    return job;
+  }
+
+  /**
    * Job 수정
    */
   async update(id: string, updateJobDto: UpdateJobDto): Promise<Job> {
-    const job = await this.findOne(id);
+    const job = await this.findOneInternal(id);
     const previousIsActive = job.isActive;
     const previousScheduleMinutes = job.scheduleMinutes;
 
@@ -120,7 +173,7 @@ export class JobsService {
    * Job 삭제
    */
   async remove(id: string): Promise<void> {
-    const job = await this.findOne(id);
+    const job = await this.findOneInternal(id);
     await this.jobRepository.remove(job);
   }
 

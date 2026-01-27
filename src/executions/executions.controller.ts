@@ -22,6 +22,8 @@ import {
   ErrorResponseDto,
 } from "../common/dto/response.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { CurrentUser } from "../auth/decorators/current-user.decorator";
+import { User } from "../users/entities/user.entity";
 
 /**
  * ExecutionsController
@@ -140,6 +142,21 @@ export class ExecutionsController {
     },
   })
   @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: "권한 없음 (해당 Job에 접근할 권한이 없음)",
+    type: ErrorResponseDto,
+    example: {
+      meta: {
+        requestId: "550e8400-e29b-41d4-a716-446655440000",
+        timestamp: "2026-01-19T11:47:42.123Z",
+      },
+      error: {
+        code: "FORBIDDEN",
+        message: "해당 Job에 접근할 권한이 없습니다.",
+      },
+    },
+  })
+  @ApiResponse({
     status: HttpStatus.UNAUTHORIZED,
     description: "인증 실패",
     type: ErrorResponseDto,
@@ -187,11 +204,14 @@ export class ExecutionsController {
   async findAll(
     @Param("jobId") jobId: string,
     @Query() query: ExecutionQueryDto,
+    @CurrentUser() user: User,
   ) {
     return await this.executionsService.findByJobId(
       jobId,
       query.limit || 20,
       query.cursor,
+      user.id,
+      user.role,
     );
   }
 }

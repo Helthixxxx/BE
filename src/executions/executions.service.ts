@@ -6,6 +6,7 @@ import { ErrorType } from "../common/enums/error-type.enum";
 import { ExecutionListResponseDto } from "./dto/execution-response.dto";
 import { encodeCursor, decodeCursor } from "./dto/cursor.dto";
 import { JobsService } from "../jobs/jobs.service";
+import { UserRole } from "../users/entities/user.entity";
 
 /**
  * ExecutionsService
@@ -107,16 +108,20 @@ export class ExecutionsService {
   }
 
   /**
-   * Job의 Execution 목록 조회 (Admin용 - 모든 Job 접근 가능)
+   * Job의 Execution 목록 조회
+   * USER: 자신이 생성한 Job의 Execution만 조회 가능
+   * ADMIN: 모든 Job의 Execution 조회 가능
    * 정렬: createdAt DESC, id DESC
    */
   async findByJobId(
     jobId: string,
     limit: number = 20,
     cursor?: string,
+    userId?: string,
+    userRole?: UserRole,
   ): Promise<ExecutionListResponseDto> {
-    // Job 존재 확인
-    await this.jobsService.findOne(jobId);
+    // Job 존재 확인 및 접근 권한 확인 (JobsService.findOne에서 권한 검증 수행)
+    await this.jobsService.findOne(jobId, userId!, userRole!);
 
     return this.findByJobIdInternal(jobId, limit, cursor);
   }
