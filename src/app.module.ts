@@ -10,6 +10,7 @@ import { NotificationLogsModule } from "./notification-logs/notification-logs.mo
 import { SchedulerModule } from "./scheduler/scheduler.module";
 import { AuthModule } from "./auth/auth.module";
 import { DevicesModule } from "./devices/devices.module";
+import { FakeApiModule } from "./fake-api/fake-api.module";
 import databaseConfig from "./config/database.config";
 import httpConfig from "./config/http.config";
 import jwtConfig from "./config/jwt.config";
@@ -76,6 +77,8 @@ import { HealthController } from "./health.controller";
     DevicesModule,
     // 스케줄러 모듈
     SchedulerModule,
+    // 테스트용 FAKE API 모듈
+    FakeApiModule,
   ],
   controllers: [HealthController],
 })
