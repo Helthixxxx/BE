@@ -34,7 +34,9 @@ export class ResponseEnvelopeInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest<RequestWithId>();
     // requestId가 없으면 즉시 생성하여 request 객체에 저장
     if (!request.requestId) {
-      request.requestId = uuidv4();
+      // pino-http가 생성한 req.id가 있으면 그 값을 requestId로 승격(로그/응답 meta 일치 목적)
+      const reqId = (request as unknown as { id?: string }).id;
+      request.requestId = reqId || uuidv4();
     }
     const requestId = request.requestId;
 

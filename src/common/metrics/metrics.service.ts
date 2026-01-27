@@ -1,6 +1,17 @@
 import { Injectable, Inject } from "@nestjs/common";
 import { Counter, Histogram, Gauge, Registry } from "prom-client";
 
+type PromMetricJson = {
+  name: string;
+  help?: string;
+  type: unknown;
+  values?: Array<{
+    value?: number;
+    labels?: Record<string, unknown>;
+    metricName?: string;
+  }>;
+};
+
 /**
  * MetricsService
  * Prometheus 메트릭 수집 서비스
@@ -291,7 +302,73 @@ export class MetricsService {
       avg: Array<{ labels: Record<string, string>; value: number }>;
     };
   }> {
-    const metrics = await this.registry.getMetricsAsJSON();
+    const metrics =
+      (await this.registry.getMetricsAsJSON()) as unknown as PromMetricJson[];
+
+    const toLabelString = (v: unknown): string => {
+      if (typeof v === "string") return v;
+      if (typeof v === "number") return String(v);
+      if (typeof v === "boolean") return v ? "true" : "false";
+      if (typeof v === "bigint") return String(v);
+      return "";
+    };
+
+    const pickStringLabels = (
+      labels: Record<string, unknown> | undefined,
+      keys: string[],
+    ): Record<string, string> => {
+      const out: Record<string, string> = {};
+      for (const k of keys) {
+        const v = labels?.[k];
+        out[k] = toLabelString(v);
+      }
+      return out;
+    };
+
+    const extractHistogram = (
+      baseName: string,
+      labelKeys: string[],
+    ): {
+      buckets: Array<{
+        labels: Record<string, string>;
+        le: string;
+        value: number;
+      }>;
+      sum: Array<{ labels: Record<string, string>; value: number }>;
+      count: Array<{ labels: Record<string, string>; value: number }>;
+    } => {
+      const metric = metrics.find(
+        (m) => m.name === baseName && String(m.type) === "histogram",
+      );
+      const values = metric?.values || [];
+
+      const buckets = values
+        .filter((v) => v.metricName === `${baseName}_bucket`)
+        .map((v) => {
+          const labels = v.labels || {};
+          return {
+            labels: pickStringLabels(labels, labelKeys),
+            le: toLabelString(labels.le),
+            value: v.value || 0,
+          };
+        });
+
+      const sum = values
+        .filter((v) => v.metricName === `${baseName}_sum`)
+        .map((v) => ({
+          labels: pickStringLabels(v.labels, labelKeys),
+          value: v.value || 0,
+        }));
+
+      const count = values
+        .filter((v) => v.metricName === `${baseName}_count`)
+        .map((v) => ({
+          labels: pickStringLabels(v.labels, labelKeys),
+          value: v.value || 0,
+        }));
+
+      return { buckets, sum, count };
+    };
 
     // HTTP 요청 총 수 메트릭
     const requestsTotalMetric = metrics.find(
@@ -303,53 +380,14 @@ export class MetricsService {
         value: v.value || 0,
       })) || [];
 
-    // HTTP 요청 응답 시간 메트릭
-    const durationBuckets = metrics.filter((m) =>
-      m.name.startsWith("shm_http_request_duration_seconds_bucket"),
-    );
-    const durationSum = metrics.filter((m) =>
-      m.name.startsWith("shm_http_request_duration_seconds_sum"),
-    );
-    const durationCount = metrics.filter((m) =>
-      m.name.startsWith("shm_http_request_duration_seconds_count"),
-    );
-
-    const buckets =
-      durationBuckets.flatMap(
-        (m) =>
-          m.values?.map((v) => ({
-            labels: {
-              method: (v.labels?.method as string) || "",
-              route: (v.labels?.route as string) || "",
-            },
-            le: (v.labels?.le as string) || "",
-            value: v.value || 0,
-          })) || [],
-      ) || [];
-
-    const sum =
-      durationSum.flatMap(
-        (m) =>
-          m.values?.map((v) => ({
-            labels: {
-              method: (v.labels?.method as string) || "",
-              route: (v.labels?.route as string) || "",
-            },
-            value: v.value || 0,
-          })) || [],
-      ) || [];
-
-    const count =
-      durationCount.flatMap(
-        (m) =>
-          m.values?.map((v) => ({
-            labels: {
-              method: (v.labels?.method as string) || "",
-              route: (v.labels?.route as string) || "",
-            },
-            value: v.value || 0,
-          })) || [],
-      ) || [];
+    // HTTP 요청 응답 시간 메트릭 (Histogram)
+    const duration = extractHistogram("shm_http_request_duration_seconds", [
+      "method",
+      "route",
+    ]);
+    const buckets = duration.buckets;
+    const sum = duration.sum;
+    const count = duration.count;
 
     // 백분위수 계산 (라우트별로 그룹화)
     const routeGroups = new Map<
@@ -393,53 +431,14 @@ export class MetricsService {
       };
     });
 
-    // HTTP 요청 크기 메트릭
-    const requestSizeBuckets = metrics.filter((m) =>
-      m.name.startsWith("shm_http_request_size_bytes_bucket"),
-    );
-    const requestSizeSum = metrics.filter((m) =>
-      m.name.startsWith("shm_http_request_size_bytes_sum"),
-    );
-    const requestSizeCount = metrics.filter((m) =>
-      m.name.startsWith("shm_http_request_size_bytes_count"),
-    );
-
-    const requestSizeBucketsData =
-      requestSizeBuckets.flatMap(
-        (m) =>
-          m.values?.map((v) => ({
-            labels: {
-              method: (v.labels?.method as string) || "",
-              route: (v.labels?.route as string) || "",
-            },
-            le: (v.labels?.le as string) || "",
-            value: v.value || 0,
-          })) || [],
-      ) || [];
-
-    const requestSizeSumData =
-      requestSizeSum.flatMap(
-        (m) =>
-          m.values?.map((v) => ({
-            labels: {
-              method: (v.labels?.method as string) || "",
-              route: (v.labels?.route as string) || "",
-            },
-            value: v.value || 0,
-          })) || [],
-      ) || [];
-
-    const requestSizeCountData =
-      requestSizeCount.flatMap(
-        (m) =>
-          m.values?.map((v) => ({
-            labels: {
-              method: (v.labels?.method as string) || "",
-              route: (v.labels?.route as string) || "",
-            },
-            value: v.value || 0,
-          })) || [],
-      ) || [];
+    // HTTP 요청 크기 메트릭 (Histogram)
+    const requestSize = extractHistogram("shm_http_request_size_bytes", [
+      "method",
+      "route",
+    ]);
+    const requestSizeBucketsData = requestSize.buckets;
+    const requestSizeSumData = requestSize.sum;
+    const requestSizeCountData = requestSize.count;
 
     const requestSizeAvg = requestSizeSumData.map((sumItem) => {
       const countItem = requestSizeCountData.find(
@@ -456,53 +455,14 @@ export class MetricsService {
       };
     });
 
-    // HTTP 응답 크기 메트릭
-    const responseSizeBuckets = metrics.filter((m) =>
-      m.name.startsWith("shm_http_response_size_bytes_bucket"),
-    );
-    const responseSizeSum = metrics.filter((m) =>
-      m.name.startsWith("shm_http_response_size_bytes_sum"),
-    );
-    const responseSizeCount = metrics.filter((m) =>
-      m.name.startsWith("shm_http_response_size_bytes_count"),
-    );
-
-    const responseSizeBucketsData =
-      responseSizeBuckets.flatMap(
-        (m) =>
-          m.values?.map((v) => ({
-            labels: {
-              method: (v.labels?.method as string) || "",
-              route: (v.labels?.route as string) || "",
-            },
-            le: (v.labels?.le as string) || "",
-            value: v.value || 0,
-          })) || [],
-      ) || [];
-
-    const responseSizeSumData =
-      responseSizeSum.flatMap(
-        (m) =>
-          m.values?.map((v) => ({
-            labels: {
-              method: (v.labels?.method as string) || "",
-              route: (v.labels?.route as string) || "",
-            },
-            value: v.value || 0,
-          })) || [],
-      ) || [];
-
-    const responseSizeCountData =
-      responseSizeCount.flatMap(
-        (m) =>
-          m.values?.map((v) => ({
-            labels: {
-              method: (v.labels?.method as string) || "",
-              route: (v.labels?.route as string) || "",
-            },
-            value: v.value || 0,
-          })) || [],
-      ) || [];
+    // HTTP 응답 크기 메트릭 (Histogram)
+    const responseSize = extractHistogram("shm_http_response_size_bytes", [
+      "method",
+      "route",
+    ]);
+    const responseSizeBucketsData = responseSize.buckets;
+    const responseSizeSumData = responseSize.sum;
+    const responseSizeCountData = responseSize.count;
 
     const responseSizeAvg = responseSizeSumData.map((sumItem) => {
       const countItem = responseSizeCountData.find(
@@ -564,7 +524,73 @@ export class MetricsService {
     };
     healthStatus: Array<{ labels: Record<string, string>; value: number }>;
   }> {
-    const metrics = await this.registry.getMetricsAsJSON();
+    const metrics =
+      (await this.registry.getMetricsAsJSON()) as unknown as PromMetricJson[];
+
+    const toLabelString = (v: unknown): string => {
+      if (typeof v === "string") return v;
+      if (typeof v === "number") return String(v);
+      if (typeof v === "boolean") return v ? "true" : "false";
+      if (typeof v === "bigint") return String(v);
+      return "";
+    };
+
+    const pickStringLabels = (
+      labels: Record<string, unknown> | undefined,
+      keys: string[],
+    ): Record<string, string> => {
+      const out: Record<string, string> = {};
+      for (const k of keys) {
+        const v = labels?.[k];
+        out[k] = toLabelString(v);
+      }
+      return out;
+    };
+
+    const extractHistogram = (
+      baseName: string,
+      labelKeys: string[],
+    ): {
+      buckets: Array<{
+        labels: Record<string, string>;
+        le: string;
+        value: number;
+      }>;
+      sum: Array<{ labels: Record<string, string>; value: number }>;
+      count: Array<{ labels: Record<string, string>; value: number }>;
+    } => {
+      const metric = metrics.find(
+        (m) => m.name === baseName && String(m.type) === "histogram",
+      );
+      const values = metric?.values || [];
+
+      const buckets = values
+        .filter((v) => v.metricName === `${baseName}_bucket`)
+        .map((v) => {
+          const labels = v.labels || {};
+          return {
+            labels: pickStringLabels(labels, labelKeys),
+            le: toLabelString(labels.le),
+            value: v.value || 0,
+          };
+        });
+
+      const sum = values
+        .filter((v) => v.metricName === `${baseName}_sum`)
+        .map((v) => ({
+          labels: pickStringLabels(v.labels, labelKeys),
+          value: v.value || 0,
+        }));
+
+      const count = values
+        .filter((v) => v.metricName === `${baseName}_count`)
+        .map((v) => ({
+          labels: pickStringLabels(v.labels, labelKeys),
+          value: v.value || 0,
+        }));
+
+      return { buckets, sum, count };
+    };
 
     // Job 실행 총 수
     const executionsTotalMetric = metrics.find(
@@ -576,50 +602,14 @@ export class MetricsService {
         value: v.value || 0,
       })) || [];
 
-    // Job 실행 시간 메트릭
-    const executionDurationBuckets = metrics.filter((m) =>
-      m.name.startsWith("shm_job_execution_duration_seconds_bucket"),
+    // Job 실행 시간 메트릭 (Histogram)
+    const executionDuration = extractHistogram(
+      "shm_job_execution_duration_seconds",
+      ["job_id"],
     );
-    const executionDurationSum = metrics.filter((m) =>
-      m.name.startsWith("shm_job_execution_duration_seconds_sum"),
-    );
-    const executionDurationCount = metrics.filter((m) =>
-      m.name.startsWith("shm_job_execution_duration_seconds_count"),
-    );
-
-    const executionBuckets =
-      executionDurationBuckets.flatMap(
-        (m) =>
-          m.values?.map((v) => ({
-            labels: {
-              job_id: (v.labels?.job_id as string) || "",
-            },
-            le: (v.labels?.le as string) || "",
-            value: v.value || 0,
-          })) || [],
-      ) || [];
-
-    const executionSum =
-      executionDurationSum.flatMap(
-        (m) =>
-          m.values?.map((v) => ({
-            labels: {
-              job_id: (v.labels?.job_id as string) || "",
-            },
-            value: v.value || 0,
-          })) || [],
-      ) || [];
-
-    const executionCount =
-      executionDurationCount.flatMap(
-        (m) =>
-          m.values?.map((v) => ({
-            labels: {
-              job_id: (v.labels?.job_id as string) || "",
-            },
-            value: v.value || 0,
-          })) || [],
-      ) || [];
+    const executionBuckets = executionDuration.buckets;
+    const executionSum = executionDuration.sum;
+    const executionCount = executionDuration.count;
 
     // Job별 백분위수 계산
     const jobGroups = new Map<
@@ -734,7 +724,8 @@ export class MetricsService {
       utilizationPercent: number;
     };
   }> {
-    const metrics = await this.registry.getMetricsAsJSON();
+    const metrics =
+      (await this.registry.getMetricsAsJSON()) as unknown as PromMetricJson[];
 
     const cpuUser = metrics.find(
       (m) => m.name === "shm_process_cpu_user_seconds_total",
@@ -746,13 +737,13 @@ export class MetricsService {
       (m) => m.name === "shm_process_resident_memory_bytes",
     );
     const heapUsed = metrics.find(
-      (m) => m.name === "shm_process_heap_used_bytes",
+      (m) => m.name === "shm_nodejs_heap_size_used_bytes",
     );
     const heapTotal = metrics.find(
-      (m) => m.name === "shm_process_heap_total_bytes",
+      (m) => m.name === "shm_nodejs_heap_size_total_bytes",
     );
     const heapExternal = metrics.find(
-      (m) => m.name === "shm_process_heap_external_bytes",
+      (m) => m.name === "shm_nodejs_external_memory_bytes",
     );
     const rss = metrics.find(
       (m) => m.name === "shm_process_resident_memory_bytes",
@@ -815,55 +806,82 @@ export class MetricsService {
     };
     connectionsActive: number;
   }> {
-    const metrics = await this.registry.getMetricsAsJSON();
+    const metrics =
+      (await this.registry.getMetricsAsJSON()) as unknown as PromMetricJson[];
 
-    // 데이터베이스 쿼리 시간 메트릭
-    const queryDurationBuckets = metrics.filter((m) =>
-      m.name.startsWith("shm_db_query_duration_seconds_bucket"),
-    );
-    const queryDurationSum = metrics.filter((m) =>
-      m.name.startsWith("shm_db_query_duration_seconds_sum"),
-    );
-    const queryDurationCount = metrics.filter((m) =>
-      m.name.startsWith("shm_db_query_duration_seconds_count"),
-    );
+    const toLabelString = (v: unknown): string => {
+      if (typeof v === "string") return v;
+      if (typeof v === "number") return String(v);
+      if (typeof v === "boolean") return v ? "true" : "false";
+      if (typeof v === "bigint") return String(v);
+      return "";
+    };
 
-    const buckets =
-      queryDurationBuckets.flatMap(
-        (m) =>
-          m.values?.map((v) => ({
-            labels: {
-              operation: (v.labels?.operation as string) || "",
-              table: (v.labels?.table as string) || "",
-            },
-            le: (v.labels?.le as string) || "",
+    const pickStringLabels = (
+      labels: Record<string, unknown> | undefined,
+      keys: string[],
+    ): Record<string, string> => {
+      const out: Record<string, string> = {};
+      for (const k of keys) {
+        const v = labels?.[k];
+        out[k] = toLabelString(v);
+      }
+      return out;
+    };
+
+    const extractHistogram = (
+      baseName: string,
+      labelKeys: string[],
+    ): {
+      buckets: Array<{
+        labels: Record<string, string>;
+        le: string;
+        value: number;
+      }>;
+      sum: Array<{ labels: Record<string, string>; value: number }>;
+      count: Array<{ labels: Record<string, string>; value: number }>;
+    } => {
+      const metric = metrics.find(
+        (m) => m.name === baseName && String(m.type) === "histogram",
+      );
+      const values = metric?.values || [];
+
+      const buckets = values
+        .filter((v) => v.metricName === `${baseName}_bucket`)
+        .map((v) => {
+          const labels = v.labels || {};
+          return {
+            labels: pickStringLabels(labels, labelKeys),
+            le: toLabelString(labels.le),
             value: v.value || 0,
-          })) || [],
-      ) || [];
+          };
+        });
 
-    const sum =
-      queryDurationSum.flatMap(
-        (m) =>
-          m.values?.map((v) => ({
-            labels: {
-              operation: (v.labels?.operation as string) || "",
-              table: (v.labels?.table as string) || "",
-            },
-            value: v.value || 0,
-          })) || [],
-      ) || [];
+      const sum = values
+        .filter((v) => v.metricName === `${baseName}_sum`)
+        .map((v) => ({
+          labels: pickStringLabels(v.labels, labelKeys),
+          value: v.value || 0,
+        }));
 
-    const count =
-      queryDurationCount.flatMap(
-        (m) =>
-          m.values?.map((v) => ({
-            labels: {
-              operation: (v.labels?.operation as string) || "",
-              table: (v.labels?.table as string) || "",
-            },
-            value: v.value || 0,
-          })) || [],
-      ) || [];
+      const count = values
+        .filter((v) => v.metricName === `${baseName}_count`)
+        .map((v) => ({
+          labels: pickStringLabels(v.labels, labelKeys),
+          value: v.value || 0,
+        }));
+
+      return { buckets, sum, count };
+    };
+
+    // 데이터베이스 쿼리 시간 메트릭 (Histogram)
+    const queryDuration = extractHistogram("shm_db_query_duration_seconds", [
+      "operation",
+      "table",
+    ]);
+    const buckets = queryDuration.buckets;
+    const sum = queryDuration.sum;
+    const count = queryDuration.count;
 
     const avg = sum.map((sumItem) => {
       const countItem = count.find(

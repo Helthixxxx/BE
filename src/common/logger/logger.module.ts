@@ -3,6 +3,7 @@ import { LoggerModule as PinoLoggerModule } from "nestjs-pino";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { Params } from "nestjs-pino";
 import loggerConfig from "./logger.config";
+import { v4 as uuidv4 } from "uuid";
 
 /**
  * LoggerModule
@@ -36,9 +37,13 @@ import loggerConfig from "./logger.config";
                     },
                   }
                 : undefined,
+            // pino-http 자동 access log 비활성화
+            // - "request completed" 같은 로그가 출력되지 않도록 함
+            // - access log는 LoggingInterceptor(커스텀 상세 로그)만 사용
+            autoLogging: false,
             serializers: {
-              req: (req: { id?: string; method?: string; url?: string }) => ({
-                id: req.id,
+              // requestId는 최상위(requestId)로만 남기고, req에는 핵심 필드만 남김
+              req: (req: { method?: string; url?: string }) => ({
                 method: req.method,
                 url: req.url,
                 // 헤더는 민감 정보 포함 가능하므로 제외
@@ -54,14 +59,24 @@ import loggerConfig from "./logger.config";
             },
             // requestId를 로그에 포함
             genReqId: (req) => {
-              const requestId = (req as { requestId?: string }).requestId;
-              return requestId || req.id || `req-${Date.now()}`;
-            },
-            // 커스텀 로거 설정
-            customProps: (req) => {
-              return {
-                requestId: (req as { requestId?: string }).requestId,
-              };
+              const typedReq = req as { requestId?: string; id?: string };
+              // requestId / req.id를 항상 동일 값으로 유지
+              if (typedReq.requestId && typedReq.id && typedReq.requestId !== typedReq.id) {
+                typedReq.id = typedReq.requestId;
+                return typedReq.requestId;
+              }
+              if (typedReq.requestId) {
+                typedReq.id = typedReq.requestId;
+                return typedReq.requestId;
+              }
+              if (typedReq.id) {
+                typedReq.requestId = typedReq.id;
+                return typedReq.id;
+              }
+              const newId = uuidv4();
+              typedReq.id = newId;
+              typedReq.requestId = newId;
+              return newId;
             },
           },
         };

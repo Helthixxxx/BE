@@ -3,6 +3,7 @@ import { Observable } from "rxjs";
 import { tap } from "rxjs/operators";
 import { Request, Response } from "express";
 import { PinoLogger } from "nestjs-pino";
+import { v4 as uuidv4 } from "uuid";
 
 /**
  * Request 타입 확장 (requestId 포함)
@@ -28,16 +29,26 @@ export class LoggingInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest<RequestWithId>();
     const response = context.switchToHttp().getResponse<Response>();
     const method = request.method;
-    const url = request.url;
-    const query = request.query as Record<string, unknown>;
+    // express 기준: originalUrl이 있으면 query string까지 포함된 원본 URL
+    const url = (request as unknown as { originalUrl?: string }).originalUrl || request.url;
     const body = request.body as unknown;
+
+    // requestId를 요청 단위로 1개 고정 (응답 meta/로그/예외에서 공통으로 사용)
+    if (!request.requestId) {
+      request.requestId = uuidv4();
+    }
     const requestId = request.requestId;
 
     // 요청 시작 시간 기록
     const startTime = Date.now();
 
-    // Health check는 간소화
-    const isHealthCheck = url === "/health";
+    // /health 는 ALB/모니터링 호출이 잦아 로그 노이즈가 크므로 스킵
+    // (pino-http 자동 로깅에서도 제외 처리 필요: logger.module.ts 참고)
+    const skipPaths = new Set(["/health", "/metrics"]);
+    const isSkippedPath = skipPaths.has(request.url);
+    if (isSkippedPath) {
+      return next.handle();
+    }
 
     return next.handle().pipe(
       tap({
@@ -46,18 +57,16 @@ export class LoggingInterceptor implements NestInterceptor {
           this.logRequestResponse(
             method,
             url,
-            query,
             body,
             response.statusCode,
             data,
             responseTime,
-            isHealthCheck,
             requestId,
           );
         },
         error: (error) => {
           const responseTime = Date.now() - startTime;
-          this.logError(method, url, query, body, error, responseTime, requestId);
+          this.logError(method, url, body, error, responseTime, requestId);
         },
       }),
     );
@@ -69,39 +78,14 @@ export class LoggingInterceptor implements NestInterceptor {
   private logRequestResponse(
     method: string,
     url: string,
-    query: Record<string, unknown>,
     body: unknown,
     statusCode: number,
     data: unknown,
     responseTime: number,
-    isHealthCheck: boolean,
-    requestId?: string,
+    requestId: string,
   ): void {
-    // Health check는 간소화
-    if (isHealthCheck) {
-      this.logger.info(
-        {
-          type: "HTTP_REQUEST",
-          method,
-          url,
-          statusCode,
-          responseTime,
-          requestId,
-        },
-        `${method} ${url} | ${statusCode} | ${responseTime}ms`,
-      );
-      return;
-    }
-
-    // URL에 쿼리 파라미터 추가
-    let fullUrl = url;
-    const queryKeys = Object.keys(query);
-    if (queryKeys.length > 0) {
-      const queryString = queryKeys
-        .map((key) => `${key}=${this.formatValue(query[key])}`)
-        .join("&");
-      fullUrl = `${url}?${queryString}`;
-    }
+    // URL은 intercept()에서 originalUrl 우선으로 구성하므로 추가 조합하지 않음
+    const fullUrl = url;
 
     // 구조화된 로그 객체 생성
     const logData: Record<string, unknown> = {
@@ -138,21 +122,13 @@ export class LoggingInterceptor implements NestInterceptor {
   private logError(
     method: string,
     url: string,
-    query: Record<string, unknown>,
     body: unknown,
     error: unknown,
     responseTime: number,
-    requestId?: string,
+    requestId: string,
   ): void {
-    // URL에 쿼리 파라미터 추가
-    let fullUrl = url;
-    const queryKeys = Object.keys(query);
-    if (queryKeys.length > 0) {
-      const queryString = queryKeys
-        .map((key) => `${key}=${this.formatValue(query[key])}`)
-        .join("&");
-      fullUrl = `${url}?${queryString}`;
-    }
+    // URL은 intercept()에서 originalUrl 우선으로 구성하므로 추가 조합하지 않음
+    const fullUrl = url;
 
     const errorObj = error as {
       name?: string;
@@ -192,22 +168,6 @@ export class LoggingInterceptor implements NestInterceptor {
     }
 
     this.logger.error(logData, `${method} ${fullUrl} | ERROR | ${responseTime}ms`);
-  }
-
-  /**
-   * 값 포맷팅 (간단한 형태로)
-   */
-  private formatValue(value: unknown): string {
-    if (value === null || value === undefined) {
-      return "null";
-    }
-    if (typeof value === "string") {
-      return value;
-    }
-    if (typeof value === "number" || typeof value === "boolean") {
-      return String(value);
-    }
-    return JSON.stringify(value);
   }
 
   /**

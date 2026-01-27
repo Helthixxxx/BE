@@ -24,7 +24,26 @@ async function bootstrap() {
   // CORS 에러 등 미들웨어 실행 전 에러에도 requestId를 포함하기 위함
   app.use((req: Request, res: Response, next: NextFunction) => {
     // requestId를 request 객체에 저장
-    (req as RequestWithId).requestId = uuidv4();
+    // - pino-http가 사용하는 req.id와 requestId를 동일 값으로 맞춰 "요청 단위 1개 ID"를 고정
+    // - 어떤 순서로 미들웨어가 실행되더라도 두 값이 엇갈리지 않도록 상호 보정
+    const typedReq = req as unknown as { id?: string } & RequestWithId;
+
+    if (
+      typedReq.requestId &&
+      typedReq.id &&
+      typedReq.requestId !== typedReq.id
+    ) {
+      // 둘 다 존재하지만 값이 다르면 requestId를 우선(응답 meta/비즈니스 추적용)
+      typedReq.id = typedReq.requestId;
+    } else if (typedReq.requestId && !typedReq.id) {
+      typedReq.id = typedReq.requestId;
+    } else if (!typedReq.requestId && typedReq.id) {
+      typedReq.requestId = typedReq.id;
+    } else if (!typedReq.requestId && !typedReq.id) {
+      const newId = uuidv4();
+      typedReq.id = newId;
+      typedReq.requestId = newId;
+    }
     next();
   });
 

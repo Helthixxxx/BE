@@ -44,7 +44,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const request = ctx.getRequest<RequestWithId>();
     // requestId가 없으면 즉시 생성하여 request 객체에 저장
     if (!request.requestId) {
-      request.requestId = uuidv4();
+      // pino-http가 생성한 req.id가 있으면 그 값을 requestId로 승격(로그/응답 meta 일치 목적)
+      const reqId = (request as unknown as { id?: string }).id;
+      request.requestId = reqId || uuidv4();
     }
     const requestId = request.requestId;
 
@@ -66,7 +68,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         } else {
           const responseObj = exceptionResponse as HttpExceptionResponse;
           errorMessage =
-            typeof responseObj?.message === "string" ? responseObj.message : exception.message;
+            typeof responseObj?.message === "string"
+              ? responseObj.message
+              : exception.message;
         }
         if (
           errorMessage.includes("expired") ||
@@ -85,9 +89,14 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         } else {
           const responseObj = exceptionResponse as HttpExceptionResponse;
           message =
-            typeof responseObj?.message === "string" ? responseObj.message : exception.message;
+            typeof responseObj?.message === "string"
+              ? responseObj.message
+              : exception.message;
         }
-      } else if (typeof exceptionResponse === "object" && exceptionResponse !== null) {
+      } else if (
+        typeof exceptionResponse === "object" &&
+        exceptionResponse !== null
+      ) {
         // NestJS ValidationPipe가 반환하는 형태 처리
         const responseObj = exceptionResponse as HttpExceptionResponse;
 
@@ -99,7 +108,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         } else {
           errorCode = responseObj.error || responseObj.code || "HTTP_ERROR";
           message =
-            typeof responseObj.message === "string" ? responseObj.message : exception.message;
+            typeof responseObj.message === "string"
+              ? responseObj.message
+              : exception.message;
           details = responseObj.details;
         }
       } else if (typeof exceptionResponse === "string") {
@@ -164,7 +175,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       },
       exception: {
         name: exception instanceof Error ? exception.name : "Unknown",
-        message: exception instanceof Error ? exception.message : String(exception),
+        message:
+          exception instanceof Error ? exception.message : String(exception),
         stack: exception instanceof Error ? exception.stack : undefined,
       },
     };
@@ -185,7 +197,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   /**
    * 민감한 헤더 마스킹
    */
-  private maskSensitiveHeaders(headers: Record<string, unknown>): Record<string, unknown> {
+  private maskSensitiveHeaders(
+    headers: Record<string, unknown>,
+  ): Record<string, unknown> {
     const sensitiveHeaders = ["authorization", "cookie", "x-api-key"];
     const masked: Record<string, unknown> = { ...headers };
 
