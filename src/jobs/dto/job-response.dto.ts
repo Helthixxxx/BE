@@ -120,15 +120,3 @@ export class JobWithHealthListResponseDto {
   })
   items: JobWithHealthResponseDto[];
 }
-
-/**
- * Health 응답 DTO
- */
-export class HealthResponseDto {
-  @ApiProperty({
-    description: "Health 상태",
-    enum: Health,
-    example: Health.NORMAL,
-  })
-  health: Health;
-}

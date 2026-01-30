@@ -1,8 +1,9 @@
-import { Injectable, Logger, Inject } from "@nestjs/common";
+import { Injectable, Inject } from "@nestjs/common";
 import { HttpService } from "@nestjs/axios";
 import { AxiosResponse } from "axios";
 import { firstValueFrom } from "rxjs";
 import { ConfigType } from "@nestjs/config";
+import { PinoLogger } from "nestjs-pino";
 import { JobsService } from "../jobs/jobs.service";
 import { ExecutionsService } from "../executions/executions.service";
 import { HealthService } from "../health/health.service";
@@ -19,17 +20,18 @@ import httpConfig from "../config/http.config";
  */
 @Injectable()
 export class JobExecutorService {
-  private readonly logger = new Logger(JobExecutorService.name);
-
   constructor(
     private readonly httpService: HttpService,
     private readonly jobsService: JobsService,
     private readonly executionsService: ExecutionsService,
     private readonly healthService: HealthService,
     private readonly metricsService: MetricsService,
+    private readonly logger: PinoLogger,
     @Inject(httpConfig.KEY)
     private readonly httpConfiguration: ConfigType<typeof httpConfig>,
-  ) {}
+  ) {
+    this.logger.setContext(JobExecutorService.name);
+  }
 
   /**
    * Job 실행
@@ -44,11 +46,7 @@ export class JobExecutorService {
 
     try {
       // Execution 생성 (executionKey unique constraint로 중복 실행 방지)
-      const execution = await this.executionsService.create(
-        job.id,
-        scheduledAt,
-        startedAt,
-      );
+      const execution = await this.executionsService.create(job.id, scheduledAt, startedAt);
       executionId = execution.id;
 
       // HTTP 호출
@@ -77,16 +75,28 @@ export class JobExecutorService {
       // Health 업데이트 및 NotificationLog 기록
       await this.healthService.updateHealthAndNotify(job.id);
 
-      this.logger.log(
+      this.logger.info(
+        {
+          type: "JOB_EXECUTED",
+          jobId: job.id,
+          jobName: job.name,
+          executionId,
+        },
         `Job ${job.id} (${job.name}) executed successfully. Execution ID: ${executionId}`,
       );
     } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error";
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const err = error instanceof Error ? error : undefined;
 
       // Execution 생성 실패 (중복 실행 등)
       if (error instanceof Error && errorMessage.includes("already exists")) {
         this.logger.warn(
+          {
+            type: "JOB_EXECUTION_SKIPPED",
+            jobId: job.id,
+            jobName: job.name,
+            reason: errorMessage,
+          },
           `Job ${job.id} (${job.name}) execution skipped: ${errorMessage}`,
         );
         return;
@@ -111,6 +121,14 @@ export class JobExecutorService {
       }
 
       this.logger.error(
+        {
+          type: "JOB_EXECUTION_FAILED",
+          jobId: job.id,
+          jobName: job.name,
+          executionId,
+          errorMessage,
+          ...(err ? { err } : {}),
+        },
         `Job ${job.id} (${job.name}) execution failed: ${errorMessage}`,
       );
     }
@@ -138,16 +156,10 @@ export class JobExecutorService {
       let response: AxiosResponse<unknown>;
       if (job.method === HttpMethod.POST) {
         response = await firstValueFrom(
-          this.httpService.post<unknown>(
-            job.url,
-            job.body || {},
-            config as never,
-          ),
+          this.httpService.post<unknown>(job.url, job.body || {}, config as never),
         );
       } else {
-        response = await firstValueFrom(
-          this.httpService.get<unknown>(job.url, config as never),
-        );
+        response = await firstValueFrom(this.httpService.get<unknown>(job.url, config as never));
       }
 
       const httpStatus = response.status;
@@ -171,8 +183,7 @@ export class JobExecutorService {
         responseSnippet,
       };
     } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error";
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
       // error 객체에서 code 추출 (타입 안전하게)
       let errorCode: string | undefined;
@@ -193,11 +204,7 @@ export class JobExecutorService {
       }
 
       // 네트워크 에러 체크
-      if (
-        errorCode === "ECONNREFUSED" ||
-        errorCode === "ENOTFOUND" ||
-        errorCode === "ECONNRESET"
-      ) {
+      if (errorCode === "ECONNREFUSED" || errorCode === "ENOTFOUND" || errorCode === "ECONNRESET") {
         return {
           success: false,
           httpStatus: null,

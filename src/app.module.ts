@@ -10,7 +10,6 @@ import { NotificationLogsModule } from "./notification-logs/notification-logs.mo
 import { SchedulerModule } from "./scheduler/scheduler.module";
 import { AuthModule } from "./auth/auth.module";
 import { DevicesModule } from "./devices/devices.module";
-import { FakeApiModule } from "./fake-api/fake-api.module";
 import databaseConfig from "./config/database.config";
 import httpConfig from "./config/http.config";
 import jwtConfig from "./config/jwt.config";
@@ -35,14 +34,7 @@ import { MetricsController } from "./metrics.controller";
     // ConfigModule: 환경변수 관리
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [
-        databaseConfig,
-        httpConfig,
-        jwtConfig,
-        healthConfig,
-        loggerConfig,
-        metricsConfig,
-      ],
+      load: [databaseConfig, httpConfig, jwtConfig, healthConfig, loggerConfig, metricsConfig],
       envFilePath: [`.env.${process.env.NODE_ENV || "local"}`, ".env"],
       validationSchema: Joi.object({
         // JWT 필수 환경 변수
@@ -70,8 +62,7 @@ import { MetricsController } from "./metrics.controller";
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
-        const dbConfig =
-          configService.get<ReturnType<typeof databaseConfig>>("database");
+        const dbConfig = configService.get<ReturnType<typeof databaseConfig>>("database");
         if (!dbConfig) {
           throw new Error("Database config is not defined");
         }
@@ -93,8 +84,6 @@ import { MetricsController } from "./metrics.controller";
     DevicesModule,
     // 스케줄러 모듈
     SchedulerModule,
-    // 테스트용 FAKE API 모듈
-    FakeApiModule,
   ],
   controllers: [HealthController, MetricsController],
 })

@@ -1,6 +1,7 @@
-import { Injectable, Inject, forwardRef, Logger } from "@nestjs/common";
+import { Injectable, Inject, forwardRef } from "@nestjs/common";
 import { ConfigType } from "@nestjs/config";
 import { DataSource } from "typeorm";
+import { PinoLogger } from "nestjs-pino";
 import { JobsService } from "../jobs/jobs.service";
 import { ExecutionsService } from "../executions/executions.service";
 import { NotificationLogsService } from "../notification-logs/notification-logs.service";
@@ -18,8 +19,6 @@ import { Job } from "../jobs/entities/job.entity";
  */
 @Injectable()
 export class HealthService {
-  private readonly logger = new Logger(HealthService.name);
-
   // 쿨다운 시간 (밀리초)
   private readonly COOLDOWN_FAILED_MS = 30 * 60 * 1000; // 30분
   private readonly COOLDOWN_RECOVERY_MS = 60 * 60 * 1000; // 1시간
@@ -31,10 +30,13 @@ export class HealthService {
     private readonly notificationLogsService: NotificationLogsService,
     private readonly notificationsService: NotificationsService,
     private readonly metricsService: MetricsService,
+    private readonly logger: PinoLogger,
     @Inject(healthConfig.KEY)
     private readonly healthConfiguration: ConfigType<typeof healthConfig>,
     private readonly dataSource: DataSource,
-  ) {}
+  ) {
+    this.logger.setContext(HealthService.name);
+  }
 
   /**
    * Job의 Health 상태 계산 (Admin용)
@@ -315,7 +317,9 @@ export class HealthService {
     reason: string,
   ): Promise<{ success: boolean; recipientCount: number }> {
     try {
-      this.logger.log(`알림 발송 시작: Job ${jobId} (${jobName}) - ${prevHealth} → ${nextHealth}`);
+      this.logger.info(
+        `알림 발송 시작: Job ${jobId} (${jobName}) - ${prevHealth} → ${nextHealth}`,
+      );
 
       const result = await this.notificationsService.sendPushNotification({
         notificationLogId,
@@ -327,7 +331,7 @@ export class HealthService {
       });
 
       if (result.success) {
-        this.logger.log(`알림 발송 성공: Job ${jobId} - ${result.recipientCount}명에게 발송`);
+        this.logger.info(`알림 발송 성공: Job ${jobId} - ${result.recipientCount}명에게 발송`);
       } else {
         this.logger.warn(`알림 발송 실패: Job ${jobId}`);
       }
@@ -356,46 +360,5 @@ export class HealthService {
     return (
       reasons[`${prevHealth}_${nextHealth}`] || `Health changed from ${prevHealth} to ${nextHealth}`
     );
-  }
-
-  /**
-   * Health Summary 조회 (Admin용)
-   * 모든 Job의 Health 상태 요약
-   * STALLED는 FAILED에 포함됨
-   * Promise.all을 사용하여 병렬 처리로 N+1 쿼리 문제 해결
-   */
-  async getHealthSummary(): Promise<{
-    total: number;
-    normal: number;
-    degraded: number;
-    failed: number;
-  }> {
-    const jobs = await this.jobsService.findAllInternal(false);
-    const healthCounts = {
-      total: jobs.length,
-      normal: 0,
-      degraded: 0,
-      failed: 0,
-    };
-
-    // 모든 job의 health를 병렬로 계산
-    const healthResults = await Promise.all(jobs.map((job) => this.calculateHealth(job.id)));
-
-    // 결과 집계
-    for (const health of healthResults) {
-      switch (health) {
-        case Health.NORMAL:
-          healthCounts.normal++;
-          break;
-        case Health.DEGRADED:
-          healthCounts.degraded++;
-          break;
-        case Health.FAILED:
-          healthCounts.failed++;
-          break;
-      }
-    }
-
-    return healthCounts;
   }
 }

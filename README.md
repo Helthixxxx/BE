@@ -91,7 +91,6 @@ npm run start:prod
 - `GET /jobs` - Job 목록 조회
   - `?includeHealth=true` - Health 상태 포함
 - `GET /jobs/:id` - Job 단건 조회
-- `GET /jobs/:id/health` - Job의 Health 상태 조회
 - `PATCH /jobs/:id` - Job 수정
 - `DELETE /jobs/:id` - Job 삭제
 

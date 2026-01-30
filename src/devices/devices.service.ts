@@ -81,44 +81,12 @@ export class DevicesService {
   }
 
   /**
-   * 활성화된 Device 목록 조회 (사용자별)
-   */
-  async findByUserId(userId: string): Promise<DeviceResponseDto[]> {
-    const devices = await this.deviceRepository.find({
-      where: { userId, isActive: true },
-      order: { lastUsedAt: "DESC" },
-    });
-
-    return devices.map((device) => this.toResponseDto(device));
-  }
-
-  /**
    * 모든 활성화된 Device 조회 (알림 발송용)
    */
   async findActiveDevices(): Promise<Device[]> {
     return await this.deviceRepository.find({
       where: { isActive: true },
     });
-  }
-
-  /**
-   * Device 비활성화
-   * 실제 삭제 대신 isActive = false로 설정
-   */
-  async deactivate(deviceId: string, userId?: string): Promise<void> {
-    const where: { id: string; userId?: string } = { id: deviceId };
-    if (userId) {
-      where.userId = userId;
-    }
-
-    const device = await this.deviceRepository.findOne({ where });
-
-    if (!device) {
-      throw new ConflictException("Device를 찾을 수 없습니다.");
-    }
-
-    device.isActive = false;
-    await this.deviceRepository.save(device);
   }
 
   /**

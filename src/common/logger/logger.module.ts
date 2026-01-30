@@ -4,6 +4,8 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { Params } from "nestjs-pino";
 import loggerConfig from "./logger.config";
 import { v4 as uuidv4 } from "uuid";
+import { LoggerService } from "./logger.service";
+import { hostname as osHostname } from "os";
 
 /**
  * LoggerModule
@@ -25,6 +27,21 @@ import { v4 as uuidv4 } from "uuid";
         return {
           pinoHttp: {
             level,
+            // pid 제거 (기본 base에 포함되는 pid/hostname 중 pid만 제외)
+            // - base를 명시하면 기본 pid/hostname이 자동으로 추가되지 않습니다.
+            // - 운영(log format=json)에서 pid가 더 이상 출력되지 않습니다.
+            base: {
+              hostname: process.env.HOSTNAME || osHostname(),
+            },
+            // JSON 로그에서 level을 숫자 대신 영문(label)로 출력
+            // - 개발(pretty) 출력은 pino-pretty가 numeric level을 기대하므로 건드리지 않습니다.
+            ...(format === "json"
+              ? {
+                  formatters: {
+                    level: (label: string) => ({ level: label }),
+                  },
+                }
+              : {}),
             transport:
               format === "pretty"
                 ? {
@@ -83,5 +100,7 @@ import { v4 as uuidv4 } from "uuid";
       },
     }),
   ],
+  providers: [LoggerService],
+  exports: [LoggerService],
 })
 export class LoggerModule {}

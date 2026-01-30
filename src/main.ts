@@ -1,13 +1,15 @@
 import { NestFactory } from "@nestjs/core";
-import { ValidationPipe, Logger } from "@nestjs/common";
+import { ValidationPipe } from "@nestjs/common";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
 import { Request, Response, NextFunction } from "express";
 import { v4 as uuidv4 } from "uuid";
+import { PinoLogger } from "nestjs-pino";
 import { AppModule } from "./app.module";
 import { GlobalExceptionFilter } from "./common/filters/global-exception.filter";
 import { ResponseEnvelopeInterceptor } from "./common/interceptors/response-envelope.interceptor";
 import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
 import { MetricsInterceptor } from "./common/metrics/metrics.interceptor";
+import { LoggerService } from "./common/logger/logger.service";
 
 /**
  * Request 타입 확장 (requestId 포함)
@@ -17,8 +19,13 @@ interface RequestWithId extends Request {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  const logger = new Logger("Bootstrap");
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  // Nest 기본 로거를 Pino 기반 커스텀 로거로 교체하여 [Nest] 포맷 로그를 제거
+  app.useLogger(app.get(LoggerService));
+  app.flushLogs();
+
+  const logger = await app.resolve(PinoLogger);
+  logger.setContext("Bootstrap");
 
   // RequestIdMiddleware를 가장 먼저 실행되도록 등록
   // CORS 에러 등 미들웨어 실행 전 에러에도 requestId를 포함하기 위함
@@ -62,19 +69,22 @@ async function bootstrap() {
     const requestId = (req as RequestWithId).requestId || "unknown";
 
     // CORS 에러 등 미들웨어 레벨 에러 로깅 (민감 정보 마스킹)
-    logger.error({
-      type: "MIDDLEWARE_ERROR",
-      requestId,
-      method: req.method,
-      url: req.url,
-      headers: maskSensitiveHeaders(req.headers as Record<string, unknown>),
-      error: {
-        name: err.name,
-        message: err.message,
-        stack: err.stack,
+    logger.error(
+      {
+        type: "MIDDLEWARE_ERROR",
+        requestId,
+        method: req.method,
+        url: req.url,
+        headers: maskSensitiveHeaders(req.headers as Record<string, unknown>),
+        error: {
+          name: err.name,
+          message: err.message,
+          stack: err.stack,
+        },
+        timestamp: new Date().toISOString(),
       },
-      timestamp: new Date().toISOString(),
-    });
+      "MIDDLEWARE_ERROR",
+    );
 
     // CORS 에러인 경우
     if (err.message.includes("CORS")) {
@@ -121,12 +131,15 @@ async function bootstrap() {
       }
       // 그 외는 거부 (로깅 포함)
       const error = new Error("CORS 정책에 의해 차단되었습니다.");
-      logger.warn({
-        type: "CORS_ERROR",
-        origin,
-        allowedOrigins,
-        timestamp: new Date().toISOString(),
-      });
+      logger.warn(
+        {
+          type: "CORS_ERROR",
+          origin,
+          allowedOrigins,
+          timestamp: new Date().toISOString(),
+        },
+        "CORS_ERROR",
+      );
       callback(error);
     },
     credentials: true, // 쿠키, 인증 헤더 등 포함
@@ -190,11 +203,12 @@ async function bootstrap() {
 
   const port = process.env.PORT || 8080;
   await app.listen(port);
-  logger.log(`Application is running on: http://localhost:${port}`);
-  logger.log(`Swagger documentation: http://localhost:${port}${swaggerUrl}`);
+  logger.info(`Application is running on: http://localhost:${port}`);
+  logger.info(`Swagger documentation: http://localhost:${port}${swaggerUrl}`);
 }
 void bootstrap().catch((error) => {
-  const logger = new Logger("Bootstrap");
-  logger.error("Failed to start application:", error);
+  // bootstrap 단계에서 DI 컨테이너가 준비되지 않을 수 있어 console로만 출력
+  // (Nest Logger를 사용하면 [Nest] 포맷 로그가 다시 섞일 수 있음)
+  console.error("Failed to start application:", error);
   process.exit(1);
 });

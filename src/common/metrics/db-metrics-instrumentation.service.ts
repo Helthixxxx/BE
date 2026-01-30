@@ -1,6 +1,7 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { DataSource, QueryRunner } from "typeorm";
 import { MetricsService } from "./metrics.service";
+import { PinoLogger } from "nestjs-pino";
 
 /**
  * DbMetricsInstrumentationService
@@ -16,14 +17,16 @@ import { MetricsService } from "./metrics.service";
 export class DbMetricsInstrumentationService
   implements OnModuleInit, OnModuleDestroy
 {
-  private readonly logger = new Logger(DbMetricsInstrumentationService.name);
   private connectionsInterval: NodeJS.Timeout | null = null;
   private alreadyWrapped = false;
 
   constructor(
     private readonly dataSource: DataSource,
     private readonly metricsService: MetricsService,
-  ) {}
+    private readonly logger: PinoLogger,
+  ) {
+    this.logger.setContext(DbMetricsInstrumentationService.name);
+  }
 
   onModuleInit() {
     this.wrapQueryRunner();
