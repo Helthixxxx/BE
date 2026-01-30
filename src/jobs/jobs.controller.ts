@@ -35,10 +35,7 @@ import {
   JobWithHealthResponseDto,
   HealthResponseDto,
 } from "./dto/job-response.dto";
-import {
-  SuccessResponseDto,
-  ErrorResponseDto,
-} from "../common/dto/response.dto";
+import { SuccessResponseDto, ErrorResponseDto } from "../common/dto/response.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { Roles } from "../auth/decorators/roles.decorator";
@@ -49,8 +46,11 @@ import { HealthSummaryResponseDto } from "../health/dto/health-summary-response.
 /**
  * JobsController
  * Job API 엔드포인트
- * - GET 요청: USER 또는 ADMIN 모두 접근 가능 (모든 Job 조회)
- * - POST/PATCH/DELETE 요청: ADMIN만 접근 가능
+ * - GET 요청: USER 또는 ADMIN 모두 접근 가능
+ *   - USER는 본인이 생성한 Job만 조회 가능 (서비스 레벨에서 소유권/필터링)
+ *   - ADMIN은 모든 Job 조회 가능
+ * - POST/PATCH/DELETE 요청: USER 또는 ADMIN 모두 접근 가능
+ *   - USER는 본인이 생성한 Job만 수정/삭제 가능 (서비스 레벨에서 소유권 체크)
  */
 @ApiTags("jobs")
 @Controller("jobs")
@@ -64,11 +64,9 @@ export class JobsController {
   ) {}
 
   @Post()
-  @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
   @ApiOperation({
-    summary: "Job 생성 (Admin 전용)",
-    description: "새로운 Job을 생성합니다. (Admin 전용)",
+    summary: "Job 생성",
+    description: "새로운 Job을 생성합니다. (USER 또는 ADMIN)",
   })
   @ApiBody({ type: CreateJobDto })
   @ApiResponse({
@@ -272,19 +270,13 @@ export class JobsController {
       );
     }
 
-    const jobs = await this.jobsService.findAll(
-      includeHealth,
-      user.id,
-      user.role,
-    );
+    const jobs = await this.jobsService.findAll(includeHealth, user.id, user.role);
 
     if (includeHealth) {
       // 각 Job의 Health 계산
       const jobsWithHealth = await Promise.all(
         jobs.map(async (job) => {
-          const calculatedHealth = await this.healthService.calculateHealth(
-            job.id,
-          );
+          const calculatedHealth = await this.healthService.calculateHealth(job.id);
           return {
             ...job,
             health: calculatedHealth,
@@ -477,9 +469,11 @@ export class JobsController {
   }
 
   @Get(":id/health")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
   @ApiOperation({
-    summary: "Job Health 상태 조회",
-    description: "특정 Job의 현재 Health 상태를 조회합니다. (USER 또는 ADMIN)",
+    summary: "Job Health 상태 조회 (ADMIN 전용)",
+    description: "특정 Job의 현재 Health 상태를 조회합니다. (ADMIN)",
   })
   @ApiParam({
     name: "id",
@@ -545,19 +539,15 @@ export class JobsController {
       },
     },
   })
-  async getHealth(@Param("id") id: string, @CurrentUser() user: User) {
-    // Job 접근 권한 확인
-    await this.jobsService.findOne(id, user.id, user.role);
+  async getHealth(@Param("id") id: string) {
     const health = await this.healthService.calculateHealth(id);
     return { health };
   }
 
   @Patch(":id")
-  @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
   @ApiOperation({
-    summary: "Job 수정 (Admin 전용)",
-    description: "특정 Job의 정보를 수정합니다. (Admin 전용)",
+    summary: "Job 수정",
+    description: "특정 Job의 정보를 수정합니다. (USER 또는 ADMIN, USER는 본인 Job만 가능)",
   })
   @ApiParam({
     name: "id",
@@ -639,16 +629,18 @@ export class JobsController {
       },
     },
   })
-  async update(@Param("id") id: string, @Body() updateJobDto: UpdateJobDto) {
-    return await this.jobsService.update(id, updateJobDto);
+  async update(
+    @Param("id") id: string,
+    @Body() updateJobDto: UpdateJobDto,
+    @CurrentUser() user: User,
+  ) {
+    return await this.jobsService.update(id, updateJobDto, user.id, user.role);
   }
 
   @Delete(":id")
-  @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
   @ApiOperation({
-    summary: "Job 삭제 (Admin 전용)",
-    description: "특정 Job을 삭제합니다. (Admin 전용)",
+    summary: "Job 삭제",
+    description: "특정 Job을 삭제합니다. (USER 또는 ADMIN, USER는 본인 Job만 가능)",
   })
   @ApiParam({
     name: "id",
@@ -713,8 +705,8 @@ export class JobsController {
       },
     },
   })
-  async remove(@Param("id") id: string) {
-    await this.jobsService.remove(id);
+  async remove(@Param("id") id: string, @CurrentUser() user: User) {
+    await this.jobsService.remove(id, user.id, user.role);
     return null;
   }
 }

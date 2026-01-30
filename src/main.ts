@@ -28,11 +28,7 @@ async function bootstrap() {
     // - 어떤 순서로 미들웨어가 실행되더라도 두 값이 엇갈리지 않도록 상호 보정
     const typedReq = req as unknown as { id?: string } & RequestWithId;
 
-    if (
-      typedReq.requestId &&
-      typedReq.id &&
-      typedReq.requestId !== typedReq.id
-    ) {
+    if (typedReq.requestId && typedReq.id && typedReq.requestId !== typedReq.id) {
       // 둘 다 존재하지만 값이 다르면 requestId를 우선(응답 meta/비즈니스 추적용)
       typedReq.id = typedReq.requestId;
     } else if (typedReq.requestId && !typedReq.id) {
@@ -48,9 +44,7 @@ async function bootstrap() {
   });
 
   // 민감한 헤더 마스킹 유틸리티 함수
-  const maskSensitiveHeaders = (
-    headers: Record<string, unknown>,
-  ): Record<string, unknown> => {
+  const maskSensitiveHeaders = (headers: Record<string, unknown>): Record<string, unknown> => {
     const sensitiveHeaders = ["authorization", "cookie", "x-api-key"];
     const masked: Record<string, unknown> = { ...headers };
 

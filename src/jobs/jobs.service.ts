@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-} from "@nestjs/common";
+import { Injectable, NotFoundException, ForbiddenException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, EntityManager, DataSource } from "typeorm";
 import { Job } from "./entities/job.entity";
@@ -49,10 +45,7 @@ export class JobsService {
 
       // 저장 후 createdAt이 설정되므로, 이를 기준으로 nextRunAt 계산
       if (isActive && savedJob.createdAt) {
-        const nextRunAt = this.calculateNextRunAt(
-          savedJob.createdAt,
-          savedJob.scheduleMinutes,
-        );
+        const nextRunAt = this.calculateNextRunAt(savedJob.createdAt, savedJob.scheduleMinutes);
         savedJob.nextRunAt = nextRunAt;
         return await jobRepo.save(savedJob);
       }
@@ -143,8 +136,14 @@ export class JobsService {
   /**
    * Job 수정
    */
-  async update(id: string, updateJobDto: UpdateJobDto): Promise<Job> {
-    const job = await this.findOneInternal(id);
+  async update(
+    id: string,
+    updateJobDto: UpdateJobDto,
+    userId: string,
+    userRole: UserRole,
+  ): Promise<Job> {
+    // USER면 본인 소유 Job만 수정 가능 / ADMIN이면 모두 가능
+    const job = await this.findOne(id, userId, userRole);
     const previousIsActive = job.isActive;
     const previousScheduleMinutes = job.scheduleMinutes;
 
@@ -172,8 +171,9 @@ export class JobsService {
   /**
    * Job 삭제
    */
-  async remove(id: string): Promise<void> {
-    const job = await this.findOneInternal(id);
+  async remove(id: string, userId: string, userRole: UserRole): Promise<void> {
+    // USER면 본인 소유 Job만 삭제 가능 / ADMIN이면 모두 가능
+    const job = await this.findOne(id, userId, userRole);
     await this.jobRepository.remove(job);
   }
 
@@ -214,9 +214,7 @@ export class JobsService {
    * 트랜잭션 매니저가 제공되면 해당 트랜잭션 내에서 실행
    */
   async findOneWithLock(jobId: string, manager?: EntityManager): Promise<Job> {
-    const repository = manager
-      ? manager.getRepository(Job)
-      : this.jobRepository;
+    const repository = manager ? manager.getRepository(Job) : this.jobRepository;
 
     const job = await repository
       .createQueryBuilder("job")
