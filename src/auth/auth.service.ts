@@ -18,6 +18,7 @@ import {
   AuthResponseDto,
   RefreshResponseDto,
   LogoutResponseDto,
+  WithdrawResponseDto,
 } from "./dto/auth-response.dto";
 import { MeResponseDto } from "./dto/me-response.dto";
 import { JwtPayload } from "./strategies/jwt.strategy";
@@ -75,10 +76,7 @@ export class AuthService {
       const tokens = this.generateTokens(savedUser);
 
       // Refresh Token 해시 저장
-      const refreshTokenHash = await bcrypt.hash(
-        tokens.refreshToken,
-        bcryptConfig.saltRounds,
-      );
+      const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, bcryptConfig.saltRounds);
       savedUser.refreshTokenHash = refreshTokenHash;
       await userRepo.save(savedUser);
 
@@ -108,9 +106,7 @@ export class AuthService {
 
       if (!user) {
         // 보안: 과도한 사유 노출 금지
-        throw new UnauthorizedException(
-          "아이디 또는 비밀번호가 일치하지 않습니다.",
-        );
+        throw new UnauthorizedException("아이디 또는 비밀번호가 일치하지 않습니다.");
       }
 
       // 비밀번호 검증
@@ -118,19 +114,14 @@ export class AuthService {
 
       if (!isPasswordValid) {
         // 보안: 과도한 사유 노출 금지
-        throw new UnauthorizedException(
-          "아이디 또는 비밀번호가 일치하지 않습니다.",
-        );
+        throw new UnauthorizedException("아이디 또는 비밀번호가 일치하지 않습니다.");
       }
 
       // 토큰 발급
       const tokens = this.generateTokens(user);
 
       // Refresh Token 회전: 새 refreshToken 해시로 갱신
-      const refreshTokenHash = await bcrypt.hash(
-        tokens.refreshToken,
-        bcryptConfig.saltRounds,
-      );
+      const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, bcryptConfig.saltRounds);
       user.refreshTokenHash = refreshTokenHash;
       await userRepo.save(user);
 
@@ -172,10 +163,7 @@ export class AuthService {
           throw new UnauthorizedException("유효하지 않은 refresh token입니다.");
         }
 
-        const isTokenValid = await bcrypt.compare(
-          refreshToken,
-          user.refreshTokenHash,
-        );
+        const isTokenValid = await bcrypt.compare(refreshToken, user.refreshTokenHash);
 
         if (!isTokenValid) {
           throw new UnauthorizedException("유효하지 않은 refresh token입니다.");
@@ -186,10 +174,7 @@ export class AuthService {
 
         // Refresh Token 회전: 새 refreshToken 발급 + 해시 갱신
         const newRefreshToken = this.generateRefreshToken(user);
-        const refreshTokenHash = await bcrypt.hash(
-          newRefreshToken,
-          bcryptConfig.saltRounds,
-        );
+        const refreshTokenHash = await bcrypt.hash(newRefreshToken, bcryptConfig.saltRounds);
         user.refreshTokenHash = refreshTokenHash;
         await userRepo.save(user);
 
@@ -239,6 +224,29 @@ export class AuthService {
 
     // 200 응답으로 성공을 확인하므로 data 필드 없이 반환
     return null as unknown as LogoutResponseDto;
+  }
+
+  /**
+   * 회원탈퇴
+   * 인증된 사용자 계정을 삭제합니다.
+   * - refreshTokenHash 초기화 후 User 삭제
+   * - Job은 CASCADE 삭제, Device는 userId SET NULL
+   */
+  async withdraw(user: User): Promise<WithdrawResponseDto> {
+    const foundUser = await this.userRepository.findOne({
+      where: { id: user.id },
+    });
+
+    if (!foundUser) {
+      throw new NotFoundException("사용자를 찾을 수 없습니다.");
+    }
+
+    // 세션 무효화 후 삭제
+    foundUser.refreshTokenHash = null;
+    await this.userRepository.save(foundUser);
+    await this.userRepository.remove(foundUser);
+
+    return { success: true };
   }
 
   /**

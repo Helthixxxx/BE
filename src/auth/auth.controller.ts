@@ -6,14 +6,9 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
+  Delete,
 } from "@nestjs/common";
-import {
-  ApiTags,
-  ApiOperation,
-  ApiBody,
-  ApiBearerAuth,
-  ApiResponse,
-} from "@nestjs/swagger";
+import { ApiTags, ApiOperation, ApiBody, ApiBearerAuth, ApiResponse } from "@nestjs/swagger";
 import { AuthService } from "./auth.service";
 import { SignupDto } from "./dto/signup.dto";
 import { LoginDto } from "./dto/login.dto";
@@ -23,15 +18,13 @@ import {
   AuthResponseDto,
   RefreshResponseDto,
   LogoutResponseDto,
+  WithdrawResponseDto,
 } from "./dto/auth-response.dto";
 import { MeResponseDto } from "./dto/me-response.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { CurrentUser } from "./decorators/current-user.decorator";
 import { User } from "../users/entities/user.entity";
-import {
-  SuccessResponseDto,
-  ErrorResponseDto,
-} from "../common/dto/response.dto";
+import { SuccessResponseDto, ErrorResponseDto } from "../common/dto/response.dto";
 
 /**
  * AuthController
@@ -214,8 +207,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: "Access Token 갱신",
-    description:
-      "Refresh Token으로 새로운 Access Token과 Refresh Token을 발급받습니다.",
+    description: "Refresh Token으로 새로운 Access Token과 Refresh Token을 발급받습니다.",
   })
   @ApiBody({ type: RefreshDto })
   @ApiResponse({
@@ -354,6 +346,78 @@ export class AuthController {
   })
   async logout(@Body() logoutDto: LogoutDto): Promise<LogoutResponseDto> {
     return this.authService.logout(logoutDto);
+  }
+
+  @Delete("withdraw")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth("JWT-auth")
+  @ApiOperation({
+    summary: "회원탈퇴",
+    description:
+      "인증된 사용자 계정을 삭제합니다. Job은 CASCADE 삭제, Device는 연결 해제되며 발급된 토큰은 무효화됩니다.",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "회원탈퇴 성공",
+    type: SuccessResponseDto<WithdrawResponseDto>,
+    example: {
+      meta: {
+        requestId: "550e8400-e29b-41d4-a716-446655440000",
+        timestamp: "2026-01-19T11:47:42.123Z",
+      },
+      data: {
+        success: true,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: "인증 실패",
+    type: ErrorResponseDto,
+    example: {
+      meta: {
+        requestId: "550e8400-e29b-41d4-a716-446655440000",
+        timestamp: "2026-01-19T11:47:42.123Z",
+      },
+      error: {
+        code: "UNAUTHORIZED",
+        message: "Unauthorized",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: "사용자를 찾을 수 없음",
+    type: ErrorResponseDto,
+    example: {
+      meta: {
+        requestId: "550e8400-e29b-41d4-a716-446655440000",
+        timestamp: "2026-01-19T11:47:42.123Z",
+      },
+      error: {
+        code: "NOT_FOUND",
+        message: "사용자를 찾을 수 없습니다.",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 500,
+    description: "서버 내부 오류",
+    type: ErrorResponseDto,
+    example: {
+      meta: {
+        requestId: "550e8400-e29b-41d4-a716-446655440000",
+        timestamp: "2026-01-19T11:47:42.123Z",
+      },
+      error: {
+        code: "INTERNAL_ERROR",
+        message: "Internal server error",
+      },
+    },
+  })
+  async withdraw(@CurrentUser() user: User): Promise<WithdrawResponseDto> {
+    return this.authService.withdraw(user);
   }
 
   @Get("me")

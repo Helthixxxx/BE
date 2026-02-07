@@ -104,6 +104,15 @@ npm run start:prod
 
 - `GET /health/summary` - 전체 Health 요약
 
+### Auth
+
+- `POST /auth/signup` - 회원가입
+- `POST /auth/login` - 로그인
+- `POST /auth/refresh` - Access Token 갱신
+- `POST /auth/logout` - 로그아웃
+- `GET /auth/me` - 내 정보 조회 (Bearer 인증 필요)
+- `POST /auth/withdraw` - 회원탈퇴 (Bearer 인증 필요, 상세는 [회원탈퇴 API 연동 가이드](docs/WITHDRAW_API.md) 참고)
+
 ---
 
 ## 응답 규약 (Envelope)
