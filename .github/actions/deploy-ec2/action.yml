@@ -266,7 +266,7 @@ runs:
         echo "[Check] Container status:"
         sudo docker compose ps
         echo "[Check] Container health:"
-        sudo docker inspect shm --format='{{json .State.Health}}' 2>/dev/null || echo "No health check configured"
+        sudo docker inspect helthix --format='{{json .State.Health}}' 2>/dev/null || echo "No health check configured"
         echo "[Check] Recent logs:"
         sudo docker compose logs --tail=200
         exit 1

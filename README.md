@@ -1,4 +1,4 @@
-# Service Health Monitor (Backend)
+# Helthix (Backend)
 
 개인 사이드프로젝트 및 소규모 서비스에서 운영 중인 **API / 작업(Job)** 이
 정상적으로 동작하고 있는지를 주기적으로 확인하고,
@@ -35,7 +35,7 @@ DB_HOST=localhost
 DB_PORT=5432
 DB_USERNAME=postgres
 DB_PASSWORD=postgres
-DB_NAME=shm
+DB_NAME=helthix
 DB_SYNCHRONIZE=false
 DB_LOGGING=false
 

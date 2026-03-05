@@ -1,7 +1,7 @@
 services:
   app:
     image: ${IMAGE_URI}
-    container_name: shm
+    container_name: helthix
     ports:
       - '3000:3000'
     restart: always
@@ -14,8 +14,8 @@ services:
       PORT: '3000'
 
     networks:
-      - shm-network
+      - helthix-network
 
 networks:
-  shm-network:
+  helthix-network:
     driver: bridge

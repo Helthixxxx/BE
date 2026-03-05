@@ -104,14 +104,7 @@ async function bootstrap() {
   });
 
   // CORS 설정
-  const allowedOrigins = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://localhost:3002",
-    "https://shm-admin.nextdot.kr",
-    "https://shm-api.nextdot.kr",
-    "https://admin.nextdot.kr",
-  ];
+  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || [];
 
   app.enableCors({
     origin: (
@@ -169,8 +162,8 @@ async function bootstrap() {
   // Swagger 설정
   const swaggerUrl = process.env.SWAGGER_URL || "/api-docs";
   const config = new DocumentBuilder()
-    .setTitle("Service Health Monitor API")
-    .setDescription("서비스 헬스 모니터링 시스템 API 문서")
+    .setTitle("Helthix API")
+    .setDescription("Helthix API 문서")
     .setVersion("1.0")
     .addTag("auth", "인증 API")
     .addTag("jobs", "Job 관리 API")
