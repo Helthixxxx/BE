@@ -13,8 +13,9 @@ import {
  * - notification_recipients: 개별 발송 로그
  * - jobs 테이블 확장: last_notification_sent_at, last_notification_health
  * - notification_logs 테이블 확장: notification_type, status, error_message, recipient_count
+ * - CreateUsersTable 이후에 실행되어야 함 (users 테이블 FK 참조)
  */
-export class AddPushNotificationTables1737900000000 implements MigrationInterface {
+export class AddPushNotificationTables1768813300000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // 1. devices 테이블 생성
     const devicesTableExists = await queryRunner.hasTable("devices");
