@@ -6,7 +6,6 @@ import { JobsService } from "../jobs/jobs.service";
 import { ExecutionsService } from "../executions/executions.service";
 import { NotificationLogsService } from "../notification-logs/notification-logs.service";
 import { NotificationsService } from "../notifications/notifications.service";
-import { MetricsService } from "../common/metrics/metrics.service";
 import { Health } from "../common/enums/health.enum";
 import healthConfig from "../config/health.config";
 import { NotificationLog } from "../notification-logs/entities/notification-log.entity";
@@ -29,7 +28,6 @@ export class HealthService {
     private readonly executionsService: ExecutionsService,
     private readonly notificationLogsService: NotificationLogsService,
     private readonly notificationsService: NotificationsService,
-    private readonly metricsService: MetricsService,
     private readonly logger: PinoLogger,
     @Inject(healthConfig.KEY)
     private readonly healthConfiguration: ConfigType<typeof healthConfig>,
@@ -47,12 +45,7 @@ export class HealthService {
    */
   async calculateHealth(jobId: string): Promise<Health> {
     const job = await this.jobsService.findOneInternal(jobId);
-    const health = await this.calculateHealthInternal(job);
-
-    // 메트릭 수집: Health 계산 기록
-    this.metricsService.recordHealthCalculation(health);
-
-    return health;
+    return await this.calculateHealthInternal(job);
   }
 
   /**
@@ -233,9 +226,6 @@ export class HealthService {
           result.recipientCount,
           errorMessage,
         );
-
-        // 알림 메트릭 기록
-        this.metricsService.recordNotificationSent("push", notificationStatus);
       } catch (error: unknown) {
         // 알림 발송 중 에러 발생 시 실패로 기록
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -245,17 +235,11 @@ export class HealthService {
           0,
           errorMessage,
         );
-
-        // 알림 실패 메트릭 기록
-        this.metricsService.recordNotificationSent("push", "failed");
       }
     } else if (prevHealth !== currentHealth) {
       // 쿨다운으로 인해 스킵
       this.logger.debug(`알림 발송 스킵 (쿨다운): Job ${jobId} (${prevHealth} → ${currentHealth})`);
     }
-
-    // 메트릭 수집: Job Health 상태 업데이트
-    this.metricsService.updateJobHealth(jobId, currentHealth);
 
     return currentHealth;
   }
@@ -317,9 +301,7 @@ export class HealthService {
     reason: string,
   ): Promise<{ success: boolean; recipientCount: number }> {
     try {
-      this.logger.info(
-        `알림 발송 시작: Job ${jobId} (${jobName}) - ${prevHealth} → ${nextHealth}`,
-      );
+      this.logger.info(`알림 발송 시작: Job ${jobId} (${jobName}) - ${prevHealth} → ${nextHealth}`);
 
       const result = await this.notificationsService.sendPushNotification({
         notificationLogId,

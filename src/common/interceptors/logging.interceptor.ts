@@ -44,7 +44,7 @@ export class LoggingInterceptor implements NestInterceptor {
 
     // /health 는 ALB/모니터링 호출이 잦아 로그 노이즈가 크므로 스킵
     // (pino-http 자동 로깅에서도 제외 처리 필요: logger.module.ts 참고)
-    const skipPaths = new Set(["/health", "/metrics"]);
+    const skipPaths = new Set(["/health"]);
     const isSkippedPath = skipPaths.has(request.url);
     if (isSkippedPath) {
       return next.handle();

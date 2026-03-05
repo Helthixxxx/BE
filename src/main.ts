@@ -8,7 +8,6 @@ import { AppModule } from "./app.module";
 import { GlobalExceptionFilter } from "./common/filters/global-exception.filter";
 import { ResponseEnvelopeInterceptor } from "./common/interceptors/response-envelope.interceptor";
 import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
-import { MetricsInterceptor } from "./common/metrics/metrics.interceptor";
 import { LoggerService } from "./common/logger/logger.service";
 
 /**
@@ -165,12 +164,7 @@ async function bootstrap() {
 
   // 전역 Interceptor 설정 (DI 컨테이너에서 가져오기)
   const loggingInterceptor = app.get(LoggingInterceptor);
-  const metricsInterceptor = app.get(MetricsInterceptor);
-  app.useGlobalInterceptors(
-    metricsInterceptor, // 메트릭 수집을 먼저
-    loggingInterceptor,
-    new ResponseEnvelopeInterceptor(),
-  );
+  app.useGlobalInterceptors(loggingInterceptor, new ResponseEnvelopeInterceptor());
 
   // Swagger 설정
   const swaggerUrl = process.env.SWAGGER_URL || "/api-docs";
@@ -181,7 +175,6 @@ async function bootstrap() {
     .addTag("auth", "인증 API")
     .addTag("jobs", "Job 관리 API")
     .addTag("executions", "Execution 조회 API")
-    .addTag("metrics", "메트릭 조회 API")
     .addBearerAuth(
       {
         type: "http",

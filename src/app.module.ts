@@ -16,10 +16,7 @@ import jwtConfig from "./config/jwt.config";
 import healthConfig from "./config/health.config";
 import loggerConfig from "./common/logger/logger.config";
 import { LoggerModule } from "./common/logger/logger.module";
-import metricsConfig from "./common/metrics/metrics.config";
-import { MetricsModule } from "./common/metrics/metrics.module";
 import { HealthController } from "./health.controller";
-import { MetricsController } from "./metrics.controller";
 
 /**
  * AppModule
@@ -29,12 +26,10 @@ import { MetricsController } from "./metrics.controller";
   imports: [
     // LoggerModule: 구조화된 로깅 (가장 먼저 로드)
     LoggerModule,
-    // MetricsModule: 메트릭 수집
-    MetricsModule,
     // ConfigModule: 환경변수 관리
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [databaseConfig, httpConfig, jwtConfig, healthConfig, loggerConfig, metricsConfig],
+      load: [databaseConfig, httpConfig, jwtConfig, healthConfig, loggerConfig],
       envFilePath: [`.env.${process.env.NODE_ENV || "local"}`, ".env"],
       validationSchema: Joi.object({
         // JWT 필수 환경 변수
@@ -85,6 +80,6 @@ import { MetricsController } from "./metrics.controller";
     // 스케줄러 모듈
     SchedulerModule,
   ],
-  controllers: [HealthController, MetricsController],
+  controllers: [HealthController],
 })
 export class AppModule {}
