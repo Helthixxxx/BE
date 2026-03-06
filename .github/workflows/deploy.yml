@@ -17,7 +17,6 @@ env:
   ECR_REPOSITORY: helthix
   TARGET_GROUP_ARN: arn:aws:elasticloadbalancing:ap-northeast-2:466279485907:targetgroup/Helthix-TG/14612cd37009b85e
   AWS_ACCOUNT_ID: '466279485907'
-  SLACK_WEBHOOK_URL: 'https://hooks.slack.com/services/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'
 
 jobs:
   notify-deploy-start:
@@ -66,7 +65,7 @@ jobs:
                 }
               ]
             }' \
-            ${{ env.SLACK_WEBHOOK_URL }}
+            ${{ secrets.SLACK_WEBHOOK_URL }}
 
   build-and-push:
     needs: notify-deploy-start
@@ -173,7 +172,7 @@ jobs:
                 }
               ]
             }' \
-            ${{ env.SLACK_WEBHOOK_URL }}
+            ${{ secrets.SLACK_WEBHOOK_URL }}
 
   deploy-ec2-1:
     needs: build-and-push
@@ -233,7 +232,7 @@ jobs:
                 }
               ]
             }' \
-            ${{ env.SLACK_WEBHOOK_URL }}
+            ${{ secrets.SLACK_WEBHOOK_URL }}
 
   deploy-ec2-2:
     needs: [build-and-push, deploy-ec2-1]
@@ -293,7 +292,7 @@ jobs:
                 }
               ]
             }' \
-            ${{ env.SLACK_WEBHOOK_URL }}
+            ${{ secrets.SLACK_WEBHOOK_URL }}
 
   notify-deploy-success:
     needs: [build-and-push, deploy-ec2-1, deploy-ec2-2]
@@ -350,4 +349,4 @@ jobs:
                 }
               ]
             }' \
-            ${{ env.SLACK_WEBHOOK_URL }}
+            ${{ secrets.SLACK_WEBHOOK_URL }}
