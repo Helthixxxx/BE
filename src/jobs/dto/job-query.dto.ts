@@ -1,6 +1,6 @@
 import { IsOptional, IsEnum } from "class-validator";
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { Health } from "../../common/enums/health.enum";
+import { Health } from "../../common/types/health.enum";
 
 /**
  * JobQueryDto

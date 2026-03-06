@@ -6,7 +6,7 @@
  * NETWORK_ERROR: 네트워크 에러
  * UNKNOWN: 알 수 없는 에러
  */
-export enum ErrorType {
+export enum ExecutionErrorCode {
   NONE = "NONE",
   HTTP_ERROR = "HTTP_ERROR",
   TIMEOUT = "TIMEOUT",

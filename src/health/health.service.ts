@@ -1,12 +1,11 @@
 import { Injectable, Inject, forwardRef } from "@nestjs/common";
 import { ConfigType } from "@nestjs/config";
 import { DataSource } from "typeorm";
-import { PinoLogger } from "nestjs-pino";
 import { JobsService } from "../jobs/jobs.service";
 import { ExecutionsService } from "../executions/executions.service";
 import { NotificationLogsService } from "../notification-logs/notification-logs.service";
 import { NotificationsService } from "../notifications/notifications.service";
-import { Health } from "../common/enums/health.enum";
+import { Health } from "../common/types/health.enum";
 import healthConfig from "../config/health.config";
 import { NotificationLog } from "../notification-logs/entities/notification-log.entity";
 import { Job } from "../jobs/entities/job.entity";
@@ -28,13 +27,10 @@ export class HealthService {
     private readonly executionsService: ExecutionsService,
     private readonly notificationLogsService: NotificationLogsService,
     private readonly notificationsService: NotificationsService,
-    private readonly logger: PinoLogger,
     @Inject(healthConfig.KEY)
     private readonly healthConfiguration: ConfigType<typeof healthConfig>,
     private readonly dataSource: DataSource,
-  ) {
-    this.logger.setContext(HealthService.name);
-  }
+  ) {}
 
   /**
    * Job의 Health 상태 계산 (Admin용)
@@ -236,9 +232,6 @@ export class HealthService {
           errorMessage,
         );
       }
-    } else if (prevHealth !== currentHealth) {
-      // 쿨다운으로 인해 스킵
-      this.logger.debug(`알림 발송 스킵 (쿨다운): Job ${jobId} (${prevHealth} → ${currentHealth})`);
     }
 
     return currentHealth;
@@ -301,8 +294,6 @@ export class HealthService {
     reason: string,
   ): Promise<{ success: boolean; recipientCount: number }> {
     try {
-      this.logger.info(`알림 발송 시작: Job ${jobId} (${jobName}) - ${prevHealth} → ${nextHealth}`);
-
       const result = await this.notificationsService.sendPushNotification({
         notificationLogId,
         jobId,
@@ -312,16 +303,8 @@ export class HealthService {
         reason,
       });
 
-      if (result.success) {
-        this.logger.info(`알림 발송 성공: Job ${jobId} - ${result.recipientCount}명에게 발송`);
-      } else {
-        this.logger.warn(`알림 발송 실패: Job ${jobId}`);
-      }
-
       return result;
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      this.logger.error(`알림 발송 중 에러: Job ${jobId} - ${errorMessage}`);
+    } catch {
       // 에러가 발생해도 Health 업데이트는 계속 진행
       return { success: false, recipientCount: 0 };
     }

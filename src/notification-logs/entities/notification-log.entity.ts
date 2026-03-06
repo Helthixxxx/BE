@@ -9,7 +9,7 @@ import {
   Index,
 } from "typeorm";
 import { Job } from "../../jobs/entities/job.entity";
-import { Health } from "../../common/enums/health.enum";
+import { Health } from "../../common/types/health.enum";
 
 import { NotificationRecipient } from "../../notification-recipients/entities/notification-recipient.entity";
 
@@ -105,9 +105,6 @@ export class NotificationLog {
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;
 
-  @OneToMany(
-    () => NotificationRecipient,
-    (recipient) => recipient.notificationLog,
-  )
+  @OneToMany(() => NotificationRecipient, (recipient) => recipient.notificationLog)
   recipients: NotificationRecipient[];
 }

@@ -4,7 +4,7 @@ import { Repository, EntityManager, DataSource } from "typeorm";
 import { Job } from "./entities/job.entity";
 import { CreateJobDto } from "./dto/create-job.dto";
 import { UpdateJobDto } from "./dto/update-job.dto";
-import { Health } from "../common/enums/health.enum";
+import { Health } from "../common/types/health.enum";
 import { UserRole } from "../users/entities/user.entity";
 
 /**

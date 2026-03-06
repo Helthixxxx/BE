@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, DataSource } from "typeorm";
 import { Execution } from "./entities/execution.entity";
-import { ErrorType } from "../common/enums/error-type.enum";
+import { ExecutionErrorCode } from "../common/types/execution-error-type.enum";
 import { ExecutionListResponseDto } from "./dto/execution-response.dto";
 import { encodeCursor, decodeCursor } from "./dto/cursor.dto";
 import { JobsService } from "../jobs/jobs.service";
@@ -27,11 +27,7 @@ export class ExecutionsService {
    * executionKey로 중복 실행 방지
    * 트랜잭션과 UNIQUE 제약 조건으로 Race condition 방지
    */
-  async create(
-    jobId: string,
-    scheduledAt: Date,
-    startedAt: Date,
-  ): Promise<Execution> {
+  async create(jobId: string, scheduledAt: Date, startedAt: Date): Promise<Execution> {
     const executionKey = `${jobId}:${scheduledAt.toISOString()}`;
 
     try {
@@ -53,7 +49,7 @@ export class ExecutionsService {
           scheduledAt,
           startedAt,
           success: false,
-          errorType: ErrorType.NONE,
+          errorType: ExecutionErrorCode.NONE,
           executionKey, // executionKey 설정
         });
 
@@ -76,7 +72,7 @@ export class ExecutionsService {
     finishedAt: Date,
     success: boolean,
     httpStatus: number | null,
-    errorType: ErrorType,
+    errorType: ExecutionErrorCode,
     errorMessage: string | null,
     responseSnippet: string | null,
   ): Promise<void> {
@@ -168,10 +164,7 @@ export class ExecutionsService {
 
     // 성능 추이 계산을 위한 배치 처리
     // 모든 execution에 대해 필요한 이전 execution들을 한 번에 조회
-    const executionsWithTrend = await this.calculatePerformanceTrendsBatch(
-      jobId,
-      executions,
-    );
+    const executionsWithTrend = await this.calculatePerformanceTrendsBatch(jobId, executions);
 
     return {
       items: executionsWithTrend,
@@ -260,17 +253,14 @@ export class ExecutionsService {
 
     // 이전 10개 평균 계산
     const previousAvg =
-      finishedBefore.reduce((sum, exec) => sum + (exec.durationMs || 0), 0) /
-      finishedBefore.length;
+      finishedBefore.reduce((sum, exec) => sum + (exec.durationMs || 0), 0) / finishedBefore.length;
 
     // 현재 Execution의 durationMs
     const currentDuration = currentExecution.durationMs;
 
     // 변화율 계산 (양수면 느려짐, 음수면 빨라짐)
     const changePercent =
-      previousAvg > 0
-        ? ((currentDuration - previousAvg) / previousAvg) * 100
-        : 0;
+      previousAvg > 0 ? ((currentDuration - previousAvg) / previousAvg) * 100 : 0;
 
     // trend 판단
     let trend: "improved" | "stable" | "degraded";
@@ -313,19 +303,13 @@ export class ExecutionsService {
       take: 100,
     });
 
-    return this.calculatePerformanceTrendInternal(
-      currentExecution,
-      allPreviousExecutions,
-    );
+    return this.calculatePerformanceTrendInternal(currentExecution, allPreviousExecutions);
   }
 
   /**
    * Job의 최근 Execution 목록 조회 (Health 계산용)
    */
-  async findRecentByJobId(
-    jobId: string,
-    limit: number = 10,
-  ): Promise<Execution[]> {
+  async findRecentByJobId(jobId: string, limit: number = 10): Promise<Execution[]> {
     return await this.executionRepository.find({
       where: { jobId },
       order: { createdAt: "DESC", id: "DESC" },

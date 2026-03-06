@@ -1,9 +1,4 @@
-import {
-  Controller,
-  Post,
-  Body,
-  Request,
-} from "@nestjs/common";
+import { Controller, Post, Body, Request } from "@nestjs/common";
 import type { Request as ExpressRequest } from "express";
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from "@nestjs/swagger";
 import { DevicesService } from "./devices.service";

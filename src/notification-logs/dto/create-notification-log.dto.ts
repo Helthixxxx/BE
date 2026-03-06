@@ -1,5 +1,5 @@
 import { IsUUID, IsEnum, IsString, IsNotEmpty, IsDate, IsOptional } from "class-validator";
-import { Health } from "../../common/enums/health.enum";
+import { Health } from "../../common/types/health.enum";
 import { Type } from "class-transformer";
 
 /**

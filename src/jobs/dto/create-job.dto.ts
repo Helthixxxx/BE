@@ -10,7 +10,7 @@ import {
   IsBoolean,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { HttpMethod } from "../../common/enums/http-method.enum";
+import { HttpMethod } from "../../common/types/http-method.enum";
 
 /**
  * CreateJobDto

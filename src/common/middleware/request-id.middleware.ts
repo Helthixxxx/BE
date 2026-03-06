@@ -1,13 +1,6 @@
 import { Injectable, NestMiddleware } from "@nestjs/common";
+import { randomUUID } from "crypto";
 import { Request, Response, NextFunction } from "express";
-import { v4 as uuidv4 } from "uuid";
-
-/**
- * Request 타입 확장 (requestId 포함)
- */
-interface RequestWithId extends Request {
-  requestId: string;
-}
 
 /**
  * RequestIdMiddleware
@@ -17,8 +10,9 @@ interface RequestWithId extends Request {
 @Injectable()
 export class RequestIdMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction) {
-    // requestId를 request 객체에 저장
-    (req as RequestWithId).requestId = uuidv4();
+    // 요청 단위 단일 ID를 보장: 기존 ID가 있으면 재사용, 없으면 생성
+    const requestId = req.requestId || randomUUID();
+    req.requestId = requestId;
     next();
   }
 }

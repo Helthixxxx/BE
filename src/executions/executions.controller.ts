@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Get,
-  Param,
-  Query,
-  HttpStatus,
-  UseGuards,
-} from "@nestjs/common";
+import { Controller, Get, Param, Query, HttpStatus, UseGuards } from "@nestjs/common";
 import {
   ApiTags,
   ApiOperation,
@@ -17,10 +10,7 @@ import {
 import { ExecutionsService } from "./executions.service";
 import { ExecutionQueryDto } from "./dto/execution-query.dto";
 import { ExecutionListResponseDto } from "./dto/execution-response.dto";
-import {
-  SuccessResponseDto,
-  ErrorResponseDto,
-} from "../common/dto/response.dto";
+import { SuccessResponseDto, ErrorResponseDto } from "../common/types/response-docs.types";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { User } from "../users/entities/user.entity";
@@ -40,8 +30,7 @@ export class ExecutionsController {
   @Get()
   @ApiOperation({
     summary: "Execution 목록 조회",
-    description:
-      "특정 Job의 Execution 목록을 cursor pagination으로 조회합니다. (USER 또는 ADMIN)",
+    description: "특정 Job의 Execution 목록을 cursor pagination으로 조회합니다. (USER 또는 ADMIN)",
   })
   @ApiParam({
     name: "jobId",
@@ -60,8 +49,7 @@ export class ExecutionsController {
     required: false,
     type: String,
     description: "다음 페이지 커서 (base64 인코딩된 JSON 문자열)",
-    example:
-      "eyJjcmVhdGVkQXQiOiIyMDI2LTAxLTE5VDEyOjAwOjAwLjAwMFoiLCJpZCI6MTIzNDV9",
+    example: "eyJjcmVhdGVkQXQiOiIyMDI2LTAxLTE5VDEyOjAwOjAwLjAwMFoiLCJpZCI6MTIzNDV9",
   })
   @ApiResponse({
     status: HttpStatus.OK,
@@ -103,8 +91,7 @@ export class ExecutionsController {
             createdAt: "2026-01-19T11:55:00.100Z",
           },
         ],
-        nextCursor:
-          "eyJjcmVhdGVkQXQiOiIyMDI2LTAxLTE5VDExOjUwOjAwLjAwMFoiLCJpZCI6MTIzNDN9",
+        nextCursor: "eyJjcmVhdGVkQXQiOiIyMDI2LTAxLTE5VDExOjUwOjAwLjAwMFoiLCJpZCI6MTIzNDN9",
       },
     },
   })

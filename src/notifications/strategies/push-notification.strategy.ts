@@ -3,7 +3,6 @@ import { HttpService } from "@nestjs/axios";
 import { firstValueFrom } from "rxjs";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, DataSource } from "typeorm";
-import { PinoLogger } from "nestjs-pino";
 import {
   NotificationStrategy,
   NotificationPayload,
@@ -47,10 +46,7 @@ export class PushNotificationStrategy implements NotificationStrategy {
     @InjectRepository(Job)
     private readonly jobRepository: Repository<Job>,
     private readonly dataSource: DataSource,
-    private readonly logger: PinoLogger,
-  ) {
-    this.logger.setContext(PushNotificationStrategy.name);
-  }
+  ) {}
 
   /**
    * 알림 발송
@@ -63,9 +59,6 @@ export class PushNotificationStrategy implements NotificationStrategy {
 
     // Job의 userId가 null인 경우 알림 발송 안 함
     if (!job || !job.userId) {
-      this.logger.warn(
-        `Job ${jobId}의 userId가 없어 알림 발송을 건너뜁니다. (userId: ${job?.userId ?? "null"})`,
-      );
       return {
         success: true,
         recipientCount: 0,
@@ -79,9 +72,6 @@ export class PushNotificationStrategy implements NotificationStrategy {
     });
 
     if (devices.length === 0) {
-      this.logger.warn(
-        `Job ${jobId}의 사용자(userId: ${job.userId})에게 발송할 활성화된 Device가 없습니다.`,
-      );
       return {
         success: true,
         recipientCount: 0,
@@ -124,10 +114,6 @@ export class PushNotificationStrategy implements NotificationStrategy {
       // 5. 응답 처리 및 NotificationRecipient 기록
       result = await this.processResponse(devices, response.data.data, notificationLogId);
     } catch (error) {
-      this.logger.error(
-        `Expo Push API 호출 실패: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
-
       // 모든 Device에 대해 실패로 기록
       result = await this.processError(devices, notificationLogId, error);
     }
@@ -183,7 +169,6 @@ export class PushNotificationStrategy implements NotificationStrategy {
           ) {
             device.isActive = false;
             await deviceRepo.save(device);
-            this.logger.warn(`Device ${device.id} 비활성화: ${errorMessage}`);
 
             // userId가 있는 경우 추적
             if (device.userId) {
@@ -211,19 +196,13 @@ export class PushNotificationStrategy implements NotificationStrategy {
 
         // 활성 Device가 하나도 없으면 해당 사용자의 모든 Job 비활성화
         if (activeDeviceCount === 0) {
-          const deactivatedJobsCount = await jobRepo.update(
+          await jobRepo.update(
             { userId, isActive: true },
             {
               isActive: false,
               nextRunAt: null,
             },
           );
-
-          if (deactivatedJobsCount.affected && deactivatedJobsCount.affected > 0) {
-            this.logger.warn(
-              `사용자 ${userId}의 모든 활성 Device가 비활성화되어 ${deactivatedJobsCount.affected}개의 Job을 비활성화했습니다.`,
-            );
-          }
         }
       }
     });

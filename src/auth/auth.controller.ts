@@ -24,7 +24,7 @@ import { MeResponseDto } from "./dto/me-response.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { CurrentUser } from "./decorators/current-user.decorator";
 import { User } from "../users/entities/user.entity";
-import { SuccessResponseDto, ErrorResponseDto } from "../common/dto/response.dto";
+import { SuccessResponseDto, ErrorResponseDto } from "../common/types/response-docs.types";
 
 /**
  * AuthController

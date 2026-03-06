@@ -1,7 +1,8 @@
 import { ApiProperty } from "@nestjs/swagger";
+import { ErrorCode } from "./error-code.enum";
 
 /**
- * Meta 정보 DTO
+ * Swagger 문서용 Meta DTO
  */
 export class MetaDto {
   @ApiProperty({
@@ -18,24 +19,15 @@ export class MetaDto {
 }
 
 /**
- * 에러 응답 DTO
+ * Swagger 문서용 에러 DTO
  */
 export class ErrorDto {
   @ApiProperty({
     description: "에러 코드",
     example: "VALIDATION_ERROR",
-    enum: [
-      "VALIDATION_ERROR",
-      "HTTP_ERROR",
-      "INTERNAL_ERROR",
-      "NOT_FOUND",
-      "BAD_REQUEST",
-      "UNAUTHORIZED",
-      "FORBIDDEN",
-      "TOKEN_EXPIRED",
-    ],
+    enum: ErrorCode,
   })
-  code: string;
+  code: ErrorCode;
 
   @ApiProperty({
     description: "에러 메시지",
@@ -55,18 +47,21 @@ export class ErrorDto {
 }
 
 /**
- * 성공 응답 Envelope DTO
+ * Swagger 문서용 성공 응답 Envelope DTO
  */
 export class SuccessResponseDto<T> {
   @ApiProperty({ type: MetaDto })
   meta: MetaDto;
 
-  @ApiProperty({ description: "응답 데이터" })
-  data: T;
+  @ApiProperty({
+    description: "응답 데이터",
+    required: false,
+  })
+  data?: T;
 }
 
 /**
- * 실패 응답 Envelope DTO
+ * Swagger 문서용 실패 응답 Envelope DTO
  */
 export class ErrorResponseDto {
   @ApiProperty({ type: MetaDto })

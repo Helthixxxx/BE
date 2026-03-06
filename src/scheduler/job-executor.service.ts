@@ -3,13 +3,12 @@ import { HttpService } from "@nestjs/axios";
 import { AxiosResponse } from "axios";
 import { firstValueFrom } from "rxjs";
 import { ConfigType } from "@nestjs/config";
-import { PinoLogger } from "nestjs-pino";
 import { JobsService } from "../jobs/jobs.service";
 import { ExecutionsService } from "../executions/executions.service";
 import { HealthService } from "../health/health.service";
 import { Job } from "../jobs/entities/job.entity";
-import { ErrorType } from "../common/enums/error-type.enum";
-import { HttpMethod } from "../common/enums/http-method.enum";
+import { HttpMethod } from "../common/types/http-method.enum";
+import { ExecutionErrorCode } from "../common/types/execution-error-type.enum";
 import httpConfig from "../config/http.config";
 
 /**
@@ -24,12 +23,9 @@ export class JobExecutorService {
     private readonly jobsService: JobsService,
     private readonly executionsService: ExecutionsService,
     private readonly healthService: HealthService,
-    private readonly logger: PinoLogger,
     @Inject(httpConfig.KEY)
     private readonly httpConfiguration: ConfigType<typeof httpConfig>,
-  ) {
-    this.logger.setContext(JobExecutorService.name);
-  }
+  ) {}
 
   /**
    * Job 실행
@@ -64,31 +60,11 @@ export class JobExecutorService {
 
       // Health 업데이트 및 NotificationLog 기록
       await this.healthService.updateHealthAndNotify(job.id);
-
-      this.logger.info(
-        {
-          type: "JOB_EXECUTED",
-          jobId: job.id,
-          jobName: job.name,
-          executionId,
-        },
-        `Job ${job.id} (${job.name}) executed successfully. Execution ID: ${executionId}`,
-      );
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      const err = error instanceof Error ? error : undefined;
 
       // Execution 생성 실패 (중복 실행 등)
       if (error instanceof Error && errorMessage.includes("already exists")) {
-        this.logger.warn(
-          {
-            type: "JOB_EXECUTION_SKIPPED",
-            jobId: job.id,
-            jobName: job.name,
-            reason: errorMessage,
-          },
-          `Job ${job.id} (${job.name}) execution skipped: ${errorMessage}`,
-        );
         return;
       }
 
@@ -100,23 +76,11 @@ export class JobExecutorService {
           finishedAt,
           false,
           null,
-          ErrorType.UNKNOWN,
+          ExecutionErrorCode.UNKNOWN,
           errorMessage,
           null,
         );
       }
-
-      this.logger.error(
-        {
-          type: "JOB_EXECUTION_FAILED",
-          jobId: job.id,
-          jobName: job.name,
-          executionId,
-          errorMessage,
-          ...(err ? { err } : {}),
-        },
-        `Job ${job.id} (${job.name}) execution failed: ${errorMessage}`,
-      );
     }
   }
 
@@ -128,7 +92,7 @@ export class JobExecutorService {
   private async executeHttpCall(job: Job): Promise<{
     success: boolean;
     httpStatus: number | null;
-    errorType: ErrorType;
+    errorType: ExecutionErrorCode;
     errorMessage: string | null;
     responseSnippet: string | null;
   }> {
@@ -164,7 +128,7 @@ export class JobExecutorService {
       return {
         success,
         httpStatus,
-        errorType: success ? ErrorType.NONE : ErrorType.HTTP_ERROR,
+        errorType: success ? ExecutionErrorCode.NONE : ExecutionErrorCode.HTTP_ERROR,
         errorMessage: success ? null : `HTTP ${httpStatus}`,
         responseSnippet,
       };
@@ -183,7 +147,7 @@ export class JobExecutorService {
         return {
           success: false,
           httpStatus: null,
-          errorType: ErrorType.TIMEOUT,
+          errorType: ExecutionErrorCode.TIMEOUT,
           errorMessage: "Request timeout",
           responseSnippet: null,
         };
@@ -194,7 +158,7 @@ export class JobExecutorService {
         return {
           success: false,
           httpStatus: null,
-          errorType: ErrorType.NETWORK_ERROR,
+          errorType: ExecutionErrorCode.NETWORK_ERROR,
           errorMessage: errorMessage || "Network error",
           responseSnippet: null,
         };
@@ -204,7 +168,7 @@ export class JobExecutorService {
       return {
         success: false,
         httpStatus: null,
-        errorType: ErrorType.UNKNOWN,
+        errorType: ExecutionErrorCode.UNKNOWN,
         errorMessage: errorMessage || "Unknown error",
         responseSnippet: null,
       };

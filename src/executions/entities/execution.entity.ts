@@ -9,7 +9,7 @@ import {
   Unique,
 } from "typeorm";
 import { Job } from "../../jobs/entities/job.entity";
-import { ErrorType } from "../../common/enums/error-type.enum";
+import { ExecutionErrorCode } from "../../common/types/execution-error-type.enum";
 
 /**
  * Execution Entity (append-only)
@@ -50,11 +50,11 @@ export class Execution {
 
   @Column({
     type: "enum",
-    enum: ErrorType,
-    default: ErrorType.NONE,
+    enum: ExecutionErrorCode,
+    default: ExecutionErrorCode.NONE,
     name: "error_type",
   })
-  errorType: ErrorType;
+  errorType: ExecutionErrorCode;
 
   @Column({ type: "text", name: "error_message", nullable: true })
   errorMessage: string | null;

@@ -9,8 +9,8 @@ import {
   JoinColumn,
   Index,
 } from "typeorm";
-import { Health } from "../../common/enums/health.enum";
-import { HttpMethod } from "../../common/enums/http-method.enum";
+import { Health } from "../../common/types/health.enum";
+import { HttpMethod } from "../../common/types/http-method.enum";
 import { Execution } from "../../executions/entities/execution.entity";
 import { NotificationLog } from "../../notification-logs/entities/notification-log.entity";
 import { User } from "../../users/entities/user.entity";

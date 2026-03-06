@@ -1,5 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { ErrorType } from "../../common/enums/error-type.enum";
+import { ExecutionErrorCode } from "../../common/types/execution-error-type.enum";
 
 /**
  * Execution 응답 DTO
@@ -76,10 +76,10 @@ export class ExecutionResponseDto {
 
   @ApiProperty({
     description: "에러 유형",
-    enum: ErrorType,
-    example: ErrorType.NONE,
+    enum: ExecutionErrorCode,
+    example: ExecutionErrorCode.NONE,
   })
-  errorType: ErrorType;
+  errorType: ExecutionErrorCode;
 
   @ApiProperty({
     description: "에러 메시지",

@@ -14,8 +14,6 @@ import databaseConfig from "./config/database.config";
 import httpConfig from "./config/http.config";
 import jwtConfig from "./config/jwt.config";
 import healthConfig from "./config/health.config";
-import loggerConfig from "./common/logger/logger.config";
-import { LoggerModule } from "./common/logger/logger.module";
 import { HealthController } from "./health.controller";
 
 /**
@@ -24,12 +22,10 @@ import { HealthController } from "./health.controller";
  */
 @Module({
   imports: [
-    // LoggerModule: 구조화된 로깅 (가장 먼저 로드)
-    LoggerModule,
     // ConfigModule: 환경변수 관리
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [databaseConfig, httpConfig, jwtConfig, healthConfig, loggerConfig],
+      load: [databaseConfig, httpConfig, jwtConfig, healthConfig],
       envFilePath: [`.env.${process.env.NODE_ENV || "local"}`, ".env"],
       validationSchema: Joi.object({
         // JWT 필수 환경 변수

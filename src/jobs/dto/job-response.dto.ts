@@ -1,6 +1,6 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { HttpMethod } from "../../common/enums/http-method.enum";
-import { Health } from "../../common/enums/health.enum";
+import { HttpMethod } from "../../common/types/http-method.enum";
+import { Health } from "../../common/types/health.enum";
 
 /**
  * Job 응답 DTO

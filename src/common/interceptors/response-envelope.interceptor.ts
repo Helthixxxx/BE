@@ -2,25 +2,8 @@ import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from "@nes
 import { Observable } from "rxjs";
 import { map } from "rxjs/operators";
 import { Request } from "express";
-import { v4 as uuidv4 } from "uuid";
-
-/**
- * Request 타입 확장 (requestId 포함)
- */
-interface RequestWithId extends Request {
-  requestId?: string;
-}
-
-/**
- * 응답 Envelope 타입
- */
-interface ResponseEnvelope<T> {
-  meta: {
-    requestId: string;
-    timestamp: string;
-  };
-  data?: T;
-}
+import { SuccessResponse } from "../types/response.types";
+import { randomUUID } from "crypto";
 
 /**
  * ResponseEnvelopeInterceptor
@@ -30,19 +13,13 @@ interface ResponseEnvelope<T> {
  */
 @Injectable()
 export class ResponseEnvelopeInterceptor implements NestInterceptor {
-  intercept<T>(context: ExecutionContext, next: CallHandler): Observable<ResponseEnvelope<T>> {
-    const request = context.switchToHttp().getRequest<RequestWithId>();
-    // requestId가 없으면 즉시 생성하여 request 객체에 저장
-    if (!request.requestId) {
-      // pino-http가 생성한 req.id가 있으면 그 값을 requestId로 승격(로그/응답 meta 일치 목적)
-      const reqId = (request as unknown as { id?: string }).id;
-      request.requestId = reqId || uuidv4();
-    }
-    const requestId = request.requestId;
+  intercept<T>(context: ExecutionContext, next: CallHandler): Observable<SuccessResponse<T>> {
+    const request = context.switchToHttp().getRequest<Request>();
+    const requestId = request.requestId || randomUUID();
 
     return next.handle().pipe(
       map((data: T) => {
-        const response: ResponseEnvelope<T> = {
+        const response: SuccessResponse<T> = {
           meta: {
             requestId,
             timestamp: new Date().toISOString(),
