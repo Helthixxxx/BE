@@ -1,462 +1,312 @@
-# Helthix (Backend)
+# Helthix Backend
 
-개인 사이드프로젝트 및 소규모 서비스에서 운영 중인 **API / 작업(Job)** 이
-정상적으로 동작하고 있는지를 주기적으로 확인하고,
-실행 이력을 기반으로 **현재 상태(Health)** 를 자동 판단하여 알려주는
-개인용 서비스 헬스 모니터링 시스템이다.
+운영 중인 API를 주기적으로 호출하고, 실행 이력 기반으로 서비스 상태를 판단해 푸시 알림까지 연결한 백엔드 프로젝트입니다.  
 
-본 프로젝트는 실제 사용자 확보나 상용화를 목표로 하지 않으며,
-**운영 관점의 백엔드 설계 경험과 크로스 플랫폼 앱 배포 경험**을 목적으로 한다.
+---
+
+## 프로젝트 요약
+
+- 목적: 배포 후 장애/성능 저하를 자동 감지하고 빠르게 인지
+- 핵심 도메인: `Job`(모니터링 대상) / `Execution`(실행 기록) / `Health`(상태 판단)
+- 결과물: 인증 API + Job CRUD + 실행 이력 조회 + 자동 상태 전이 알림
+- 운영 환경: AWS(EC2 2대, ALB, RDS, ECR) + GitHub Actions 무중단 배포
+
+---
+
+## 담당 구현 범위
+
+- NestJS 기반 모듈형 백엔드 설계 및 구현
+- JWT 인증/인가(`USER`, `ADMIN`) 및 공통 에러/응답 규약 정리
+- 스케줄러 기반 주기 실행, 중복 실행 방지, 상태 계산 로직 구현
+- Expo Push 기반 상태 전이 알림 및 수신자 이력 저장
+- Docker 기반 배포 + GitHub Actions로 순차 롤링 배포 파이프라인 구성
 
 ---
 
 ## 기술 스택
 
-- **Framework**: NestJS
-- **Language**: TypeScript
-- **ORM**: TypeORM
-- **Database**: PostgreSQL (AWS RDS)
-- **HTTP Client**: axios (@nestjs/axios)
-- **Scheduler**: @nestjs/schedule
-- **Validation**: class-validator + ValidationPipe
-- **Config**: ConfigModule + .env
+- Language: TypeScript
+- Framework: NestJS
+- ORM: TypeORM
+- Database: PostgreSQL (AWS RDS)
+- Infra: AWS EC2, ALB, ECR, RDS
+- Scheduler: `@nestjs/schedule`
+- Auth: JWT + Passport
+- CI/CD: GitHub Actions
+- Docs: Swagger
 
 ---
 
-## 실행 방법
+## 주요 기능
 
-### 1. 환경 변수 설정
+### 1) 모니터링 Job 관리
 
-`.env` 파일을 생성하고 다음 변수를 설정합니다:
+- 인증 사용자 기준 Job 생성/조회/수정/삭제
+- `scheduleMinutes`, `method`, `url`, `headers`, `body` 설정 가능
+- USER는 본인 Job만 접근, ADMIN은 전체 접근
 
-```env
-# Database
-DB_HOST=localhost
-DB_PORT=5432
-DB_USERNAME=postgres
-DB_PASSWORD=postgres
-DB_NAME=helthix
-DB_SYNCHRONIZE=false
-DB_LOGGING=false
+### 2) 실행 이력 수집 및 조회
 
-# Server
-PORT=8080
+- 매 실행마다 `Execution` 저장
+- `executionKey(jobId + scheduledAt)`로 중복 실행 방지
+- Cursor Pagination(`createdAt DESC, id DESC`)으로 안정적인 페이지 조회
+- 각 실행에 대해 성능 추이(`improved/stable/degraded`) 계산 제공
 
-# HTTP Client
-HTTP_TIMEOUT_MS=30000
-HTTP_MAX_REDIRECTS=5
+### 3) Health 판단 및 상태 전이 처리
 
-# Health 설정
-HEALTH_DEGRADED_THRESHOLD_MS=800
-HEALTH_GRACE_PERIOD_MS=120000
+- 상태: `NORMAL`, `DEGRADED`, `FAILED`
+- 우선순위 기반 판단:
+  - `FAILED`: 최근 2회 연속 실패 또는 `nextRunAt + gracePeriod` 초과
+  - `DEGRADED`: 최근 평균 지연(절대 임계값 초과) 또는 이전 구간 대비 50% 이상 성능 저하
+  - 그 외 `NORMAL`
+- 상태 전이 시 `NotificationLog` 기록
 
-# JWT 설정
-JWT_ACCESS_SECRET=your-access-secret-key-change-in-production
-JWT_ACCESS_EXPIRES_IN=15m
-JWT_REFRESH_SECRET=your-refresh-secret-key-change-in-production
-JWT_REFRESH_EXPIRES_IN=7d
-BCRYPT_SALT_ROUNDS=10
-```
+### 4) 푸시 알림
 
-### 2. 데이터베이스 마이그레이션
+- Expo Push API 연동
+- 상태 전이 시 푸시 발송 + 수신 결과(`NotificationRecipient`) 저장
+- 유효하지 않은 디바이스 토큰 자동 비활성화
+- 활성 디바이스가 모두 사라진 사용자의 Job 자동 비활성화
 
-```bash
-# 마이그레이션 실행
-npm run migration:run
+### 5) 공통 API 규약
 
-# 마이그레이션 되돌리기
-npm run migration:revert
-```
-
-### 3. 애플리케이션 실행
-
-```bash
-# 개발 모드
-npm run start:dev
-
-# 프로덕션 빌드
-npm run build
-npm run start:prod
-```
-
-애플리케이션은 기본적으로 `http://localhost:8080`에서 실행됩니다.
+- 모든 응답을 `meta(requestId, timestamp)` 기반 envelope로 통일
+- 전역 예외 필터로 에러 코드/메시지 표준화
+- Validation 오류 상세 필드(`error.details`) 제공
 
 ---
 
-## API 엔드포인트
-
-### Jobs
-
-- `POST /jobs` - Job 생성
-- `GET /jobs` - Job 목록 조회
-  - `?includeHealth=true` - Health 상태 포함
-- `GET /jobs/:id` - Job 단건 조회
-- `PATCH /jobs/:id` - Job 수정
-- `DELETE /jobs/:id` - Job 삭제
-
-### Executions
-
-- `GET /jobs/:id/executions` - Execution 목록 조회 (cursor pagination)
-  - `?limit=20` - 페이지 크기 (기본값: 20, 최대: 100)
-  - `?cursor=<cursor>` - 다음 페이지 커서
-
-### Health
-
-- `GET /health/summary` - 전체 Health 요약
+## API 요약
 
 ### Auth
-
-- `POST /auth/signup` - 회원가입
-- `POST /auth/login` - 로그인
-- `POST /auth/refresh` - Access Token 갱신
-- `POST /auth/logout` - 로그아웃
-- `GET /auth/me` - 내 정보 조회 (Bearer 인증 필요)
-- `POST /auth/withdraw` - 회원탈퇴 (Bearer 인증 필요, 상세는 [회원탈퇴 API 연동 가이드](docs/WITHDRAW_API.md) 참고)
-
----
-
-## 응답 규약 (Envelope)
-
-모든 API 응답은 다음 규칙을 따릅니다.
-
-### 성공 응답 (2xx)
-
-```json
-{
-  "meta": {
-    "requestId": "<server-generated-id>",
-    "timestamp": "<ISO timestamp>"
-  },
-  "data": {
-    // 엔드포인트별 데이터
-  }
-}
-```
-
-### 실패 응답 (4xx/5xx)
-
-```json
-{
-  "meta": {
-    "requestId": "<server-generated-id>",
-    "timestamp": "<ISO timestamp>"
-  },
-  "error": {
-    "code": "<ERROR_CODE>",
-    "message": "<human readable message>",
-    "details": {
-      // 선택적 상세 정보
-    }
-  }
-}
-```
-
-### Validation 에러 (400)
-
-Validation 에러의 경우 `error.details`에 필드별 에러가 포함됩니다:
-
-```json
-{
-  "meta": {
-    "requestId": "...",
-    "timestamp": "..."
-  },
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Invalid request",
-    "details": {
-      "name": ["should not be empty"],
-      "url": ["must be a URL"],
-      "scheduleMinutes": ["must be an integer", "must be >= 1"]
-    }
-  }
-}
-```
-
----
-
-## Cursor Pagination
-
-Execution 조회는 cursor 기반 pagination을 사용합니다.
-
-### Cursor 포맷
-
-- cursor는 base64 인코딩된 JSON 문자열입니다
-- 형식: `base64('{"createdAt":"2026-01-17T12:34:56.000Z","id":12345}')`
-
-### 사용 방법
-
-```bash
-# 첫 페이지
-GET /jobs/:id/executions?limit=20
-
-# 다음 페이지
-GET /jobs/:id/executions?limit=20&cursor=<previous-response-nextCursor>
-```
-
-### 응답 예시
-
-```json
-{
-  "meta": {
-    "requestId": "...",
-    "timestamp": "..."
-  },
-  "data": {
-    "items": [
-      // Execution 배열
-    ],
-    "nextCursor": "base64-encoded-string" | null
-  }
-}
-```
-
-### 정렬 규칙
-
-- 정렬: `createdAt DESC, id DESC`
-- cursor는 `createdAt`과 `id`를 함께 사용하여 tie-breaker 역할을 합니다
-
----
-
-## Health 상태 정의
-
-Health는 다음 4가지 상태로 구분됩니다:
-
-- **NORMAL**: 정상 상태
-- **DEGRADED**: 성능 저하 또는 일부 실패
-- **STALLED**: 실행이 멈춤 (nextRunAt이 현재 시간보다 과거인 경우)
-- **FAILED**: 최근 3회 연속 실패
-
----
-
-## Health 판단 기준
-
-Health는 실시간으로 계산되며, 다음 우선순위로 판단합니다:
-
-### 1. STALLED
-
-```
-now > job.nextRunAt
-```
-
-- nextRunAt이 현재 시간보다 과거인 경우
-- Job이 실행되지 않고 있음을 의미
-
-### 2. FAILED
-
-```
-최근 3회 연속 실패
-```
-
-- 최근 3개의 Execution이 모두 실패한 경우
-- 심각한 장애 상태
-
-### 3. DEGRADED
-
-다음 조건 중 하나라도 만족하면 DEGRADED:
-
-```
-최근 10회 중 실패 3회 이상
-```
-
-또는
-
-```
-최근 10개 평균 durationMs >= 이전 10개 평균 durationMs * 1.5
-```
-
-- 일부 실패 또는 응답 지연이 발생하고 있음을 의미
-- 상대적 성능 저하 기준: 최근 평균이 이전 평균보다 50% 이상 느려짐
-
-### 4. NORMAL
-
-위 조건에 해당하지 않는 경우
-
----
-
-## Job 실행 로직
-
-### 스케줄링
-
-- `@nestjs/schedule`의 `@Cron` 데코레이터를 사용하여 매분 실행
-- 각 Job의 `scheduleMinutes`에 따라 실행 시간 결정
-- 실행 시간은 분 단위로 정렬 (초/밀리초는 0으로 설정)
-
-### 중복 실행 방지
-
-- `executionKey = jobId + scheduledAt`로 생성
-- `executionKey`에 UNIQUE 제약을 두어 중복 실행 방지
-- 이미 존재하는 executionKey로 실행 시도 시 해당 슬롯 실행 스킵
-
-### HTTP 호출
-
-- `@nestjs/axios`의 `HttpService` 사용
-- 시스템 기본 타임아웃 사용 (`HTTP_TIMEOUT_MS` 환경변수, 기본값: 30초)
-- 실패 유형 분류:
-  - `HTTP_ERROR`: HTTP 상태 코드 4xx, 5xx
-  - `TIMEOUT`: 요청 타임아웃
-  - `NETWORK_ERROR`: 네트워크 연결 실패
-  - `UNKNOWN`: 기타 에러
-
-### Health 업데이트
-
-- Execution 완료 후 Health 계산
-- 상태 전이 시 `NotificationLog` 기록
-- Job의 `lastHealth` 업데이트
-
----
-
-## 데이터베이스 스키마
-
-### jobs
-
-- `id` (uuid, PK)
-- `name` (string)
-- `isActive` (boolean)
-- `scheduleMinutes` (int)
-- `method` (enum: GET, POST)
-- `url` (string)
-- `headers` (jsonb, nullable)
-- `body` (jsonb, nullable)
-- `nextRunAt` (timestamptz, nullable)
-- `lastHealth` (enum, nullable)
-- `createdAt` (timestamptz)
-- `updatedAt` (timestamptz)
-
-### executions
-
-- `id` (bigint, PK, auto increment)
-- `jobId` (uuid, FK)
-- `scheduledAt` (timestamptz)
-- `startedAt` (timestamptz)
-- `finishedAt` (timestamptz, nullable)
-- `durationMs` (int, nullable)
-- `success` (boolean)
-- `httpStatus` (int, nullable)
-- `errorType` (enum)
-- `errorMessage` (text, nullable)
-- `responseSnippet` (text, nullable, max 1KB)
-- `executionKey` (string, UNIQUE)
-- `createdAt` (timestamptz)
-
-**성능 추이 정보 (API 응답에 포함)**
-- `performanceTrend`: 이전 10개 Execution 평균 대비 현재 Execution의 성능 변화
-  - `previousAvg`: 이전 10개 평균 durationMs
-  - `currentAvg`: 현재 Execution의 durationMs
-  - `changePercent`: 변화율 (양수: 느려짐, 음수: 빨라짐)
-  - `trend`: 성능 추이 (`improved` | `stable` | `degraded`)
-    - `improved`: 10% 이상 빨라짐
-    - `stable`: -10% ~ 50% 사이
-    - `degraded`: 50% 이상 느려짐
-
-### notification_logs
-
-- `id` (uuid, PK)
-- `jobId` (uuid, FK)
-- `prevHealth` (enum, nullable)
-- `nextHealth` (enum)
-- `reason` (string)
-- `sentAt` (timestamptz)
-- `createdAt` (timestamptz)
-
----
-
-## 인덱스
-
-- `executions`: `(jobId, createdAt DESC, id DESC)` - pagination 최적화
-- `executions`: `(executionKey)` UNIQUE - 중복 실행 방지
-- `jobs`: `(isActive)` - 활성 Job 조회 최적화
-- `notification_logs`: `(jobId, sentAt)` - 로그 조회 최적화
-
----
-
-## 보안 고려사항
-
-- 민감 정보(headers/body)는 로그 출력 금지
-- `responseSnippet`은 최대 1KB로 truncate
-- RDS Public access = No
-- RDS Security Group Inbound: EC2 Security Group만 허용
-
----
-
-## 개발 가이드
-
-### 코드 스타일
-
-- 모든 코드에는 "왜 이렇게 설계했는지"를 설명하는 주석 포함
-- 애매한 설계가 나오면 구현 전에 선택지와 장단점을 먼저 제시
-
-### 모듈 구조
-
-```
-src/
-├── common/           # 공통 모듈 (Middleware, Interceptor, Filter)
-├── config/           # 설정 파일
-├── jobs/             # Job 모듈
-├── executions/       # Execution 모듈
-├── health/           # Health 계산 모듈
-├── notification-logs/ # NotificationLog 모듈
-├── scheduler/         # 스케줄러 모듈
-└── migrations/       # 데이터베이스 마이그레이션
-```
-
----
-
-## Motivation
-
-개인 프로젝트나 소규모 서비스 환경에서는 다음과 같은 문제가 자주 발생한다.
-
-- API가 배포 이후에도 정상 동작하는지 지속적으로 확인하기 어렵다
-- 단순 성공/실패 로그만으로는 "현재 상태"를 판단하기 힘들다
-- 장애나 지연을 사람이 직접 확인해야 한다
-- 테스트 코드는 배포 전 검증까지만 담당하고, 운영 중 상태 판단은 공백으로 남는다
-
-이 프로젝트는 이러한 문제를 해결하기 위해
-**운영 중인 시스템의 실행 이력을 기반으로 상태를 판단하는 구조**를 구현한다.
-
----
-
-## Core Concept
-
-이 시스템은 세 가지 핵심 개념으로 구성된다.
-
-### Job
-
-주기적으로 실행되어야 하는 작업 또는 API 호출 단위
-
-예:
-- 로그인 API 호출
-- 액세스 토큰 갱신 API 호출
-- 특정 엔드포인트 헬스 체크
-
-### Execution
-
-Job이 실제로 실행된 **한 번의 실행 기록**
-
-- 시작/종료 시각
-- 성공/실패 여부
-- 소요 시간
-- 에러 유형
+- `POST /auth/signup`
+- `POST /auth/login`
+- `POST /auth/refresh`
+- `POST /auth/logout`
+- `DELETE /auth/withdraw`
+- `GET /auth/me`
+
+### Jobs
+- `POST /jobs`
+- `GET /jobs`
+- `GET /jobs/:id`
+- `PATCH /jobs/:id`
+- `DELETE /jobs/:id`
+
+### Executions
+- `GET /jobs/:jobId/executions?limit=20&cursor=...`
+
+### Devices
+- `POST /devices` (푸시 토큰 등록/업데이트)
 
 ### Health
-
-최근 Execution 이력을 기반으로 계산된 **현재 상태**
-
-예시 상태:
-- `NORMAL` : 정상
-- `DEGRADED` : 일부 실패 또는 응답 지연
-- `STALLED` : 실행 누락
-- `FAILED` : 연속 실패
+- `GET /health`
 
 ---
 
-## Out of Scope
+## 아키텍처 다이어그램
 
-다음 항목은 의도적으로 프로젝트 범위에서 제외한다.
+### AWS 인프라 아키텍처
 
-- 실제 배치 실행 시스템 구현
-- 서버 인프라 관리
-- 로그 수집/분석 플랫폼
-- 일반 사용자 대상 서비스 기능
+```mermaid
+flowchart TB
+    subgraph Internet["Internet"]
+        Users[Client]
+    end
 
-본 프로젝트는 **운영 상태 판단과 모니터링에만 집중**한다.
+    subgraph GitHub["GitHub"]
+        Repo[Repository]
+        Actions[GitHub Actions]
+    end
+
+    subgraph AWS["AWS (ap-northeast-2)"]
+        ECR[("Amazon ECR")]
+
+        subgraph LB["Load Balancing"]
+            ALB[Application Load Balancer]
+            TG[Target Group]
+        end
+
+        subgraph Compute["Compute"]
+            EC2_1["EC2-1 (Docker Compose)"]
+            EC2_2["EC2-2 (Docker Compose)"]
+        end
+
+        subgraph Data["Data"]
+            RDS[("Amazon RDS PostgreSQL")]
+        end
+    end
+
+    subgraph External["External Services"]
+        Slack[Slack Webhook]
+        Expo[Expo Push API]
+    end
+
+    Users -->|HTTPS| ALB
+    ALB --> TG
+    TG -->|HTTP :3000| EC2_1
+    TG -->|HTTP :3000| EC2_2
+
+    EC2_1 -->|DB Access| RDS
+    EC2_2 -->|DB Access| RDS
+
+    Repo -->|push main| Actions
+    Actions -->|build & push image| ECR
+    Actions -->|deploy via SSH| EC2_1
+    Actions -->|deploy via SSH| EC2_2
+    EC2_1 -->|docker pull| ECR
+    EC2_2 -->|docker pull| ECR
+
+    Actions -->|deploy notifications| Slack
+    EC2_1 -.->|push notifications| Expo
+    EC2_2 -.->|push notifications| Expo
+```
+
+### ERD
+
+```mermaid
+erDiagram
+    USERS ||--o{ DEVICES : "has"
+    USERS ||--o{ JOBS : "owns"
+    JOBS ||--o{ EXECUTIONS : "produces"
+    JOBS ||--o{ NOTIFICATION_LOGS : "triggers"
+    NOTIFICATION_LOGS ||--o{ NOTIFICATION_RECIPIENTS : "contains"
+    USERS ||--o{ NOTIFICATION_RECIPIENTS : "receives"
+    DEVICES ||--o{ NOTIFICATION_RECIPIENTS : "receives"
+
+    USERS {
+        uuid id PK
+        string provider
+        string provider_id
+        string password_hash
+        string role
+        string refresh_token_hash
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    DEVICES {
+        uuid id PK
+        uuid user_id FK
+        string push_token UK
+        string device_id
+        string platform
+        boolean is_active
+        timestamp last_used_at
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    JOBS {
+        uuid id PK
+        uuid user_id FK
+        string name
+        boolean is_active
+        int schedule_minutes
+        string method
+        string url
+        jsonb headers
+        jsonb body
+        string last_health
+        timestamp next_run_at
+        timestamp last_notification_sent_at
+        string last_notification_health
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    EXECUTIONS {
+        int id PK
+        uuid job_id FK
+        timestamp scheduled_at
+        timestamp started_at
+        timestamp finished_at
+        int duration_ms
+        boolean success
+        int http_status
+        string error_type
+        string error_message
+        string response_snippet
+        string execution_key UK
+        timestamp created_at
+    }
+
+    NOTIFICATION_LOGS {
+        uuid id PK
+        uuid job_id FK
+        string prev_health
+        string next_health
+        string reason
+        string notification_type
+        string status
+        string error_message
+        int recipient_count
+        timestamp sent_at
+        timestamp created_at
+    }
+
+    NOTIFICATION_RECIPIENTS {
+        uuid id PK
+        uuid notification_log_id FK
+        uuid device_id FK
+        uuid user_id FK
+        string status
+        string error_message
+        timestamp sent_at
+        timestamp created_at
+    }
+```
+
+---
+
+## 설계/구현 포인트
+
+### 1) 중복 실행 방지 + 경쟁 상태 대응
+
+- `executionKey`에 UNIQUE 제약 적용
+- 생성 로직을 트랜잭션으로 감싸 race condition 시에도 중복 방지
+- UNIQUE 충돌 시 동일한 도메인 에러로 정규화
+
+### 2) 알림 중복 발송 방지
+
+- Health 갱신 시 Job row를 비관적 락(`pessimistic_write`)으로 보호
+- 상태 전이 로그를 먼저 저장하고, 외부 API 호출은 트랜잭션 외부에서 실행
+- 발송 실패 시에도 로그 상태(`failed`)를 남겨 추적 가능
+
+### 3) N+1 쿼리 최소화
+
+- Execution 성능 추이 계산 시 개별 조회 대신 배치 조회로 계산
+- 페이지 단위 성능 계산 비용을 제어하면서 응답 스키마 유지
+
+### 4) 운영 친화적 배포
+
+- ALB Target Group에서 인스턴스 drain → 배포 → health check → 재등록 순차 수행
+- 2대 EC2 순차 배포로 다운타임 최소화
+- 배포 시작/실패/성공 이벤트를 Slack으로 자동 알림
+
+---
+
+## 디렉터리 구조
+
+```text
+src/
+├── auth/                   # 인증/인가
+├── jobs/                   # 모니터링 대상 관리
+├── executions/             # 실행 이력
+├── health/                 # 상태 계산/전이 판단
+├── notifications/          # 알림 전략(Expo Push)
+├── notification-logs/      # 상태 전이/발송 로그
+├── notification-recipients/# 수신자별 결과
+├── devices/                # 푸시 디바이스 토큰
+├── scheduler/              # 분 단위 스케줄 실행
+├── common/                 # 공통 응답/예외/미들웨어
+└── config/                 # 환경 설정
+```
+
+---
+
+## 개선 예정
+
+- 테스트 코드 추가(Unit/E2E) 및 CI 품질 게이트 강화
+- 알림 채널 확장(Email/Slack/Webhook)
+- Health 계산 파라미터를 운영 콘솔에서 조정 가능하도록 개선
