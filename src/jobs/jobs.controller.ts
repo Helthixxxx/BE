@@ -6,31 +6,21 @@ import {
   Patch,
   Param,
   Delete,
-  Query,
-  ParseBoolPipe,
-  ParseEnumPipe,
-  DefaultValuePipe,
-  Inject,
-  forwardRef,
   HttpStatus,
   UseGuards,
-  BadRequestException,
 } from "@nestjs/common";
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiParam,
-  ApiQuery,
   ApiBody,
   ApiBearerAuth,
 } from "@nestjs/swagger";
 import { JobsService } from "./jobs.service";
 import { CreateJobDto } from "./dto/create-job.dto";
 import { UpdateJobDto } from "./dto/update-job.dto";
-import { HealthService } from "../health/health.service";
-import { Health } from "../common/types/health.enum";
-import { JobResponseDto, JobWithHealthResponseDto } from "./dto/job-response.dto";
+import { JobResponseDto } from "./dto/job-response.dto";
 import { SuccessResponseDto, ErrorResponseDto } from "../common/types/response-docs.types";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
@@ -38,23 +28,14 @@ import { User } from "../users/entities/user.entity";
 
 /**
  * JobsController
- * Job API 엔드포인트
- * - GET 요청: USER 또는 ADMIN 모두 접근 가능
- *   - USER는 본인이 생성한 Job만 조회 가능 (서비스 레벨에서 소유권/필터링)
- *   - ADMIN은 모든 Job 조회 가능
- * - POST/PATCH/DELETE 요청: USER 또는 ADMIN 모두 접근 가능
- *   - USER는 본인이 생성한 Job만 수정/삭제 가능 (서비스 레벨에서 소유권 체크)
+ * Job 관리 API
  */
 @ApiTags("jobs")
 @Controller("jobs")
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth("JWT-auth")
 export class JobsController {
-  constructor(
-    private readonly jobsService: JobsService,
-    @Inject(forwardRef(() => HealthService))
-    private readonly healthService: HealthService,
-  ) {}
+  constructor(private readonly jobsService: JobsService) {}
 
   @Post()
   @ApiOperation({
@@ -160,26 +141,11 @@ export class JobsController {
   @Get()
   @ApiOperation({
     summary: "Job 목록 조회",
-    description:
-      "모든 Job 목록을 조회합니다. includeHealth=true로 Health 상태를 포함할 수 있고, health 파라미터로 필터링할 수 있습니다. (USER 또는 ADMIN)",
-  })
-  @ApiQuery({
-    name: "includeHealth",
-    required: false,
-    type: Boolean,
-    description: "Health 상태 포함 여부",
-    example: false,
-  })
-  @ApiQuery({
-    name: "health",
-    required: false,
-    enum: Health,
-    description: "Health 상태별 필터링 (includeHealth=true일 때만 유효)",
-    example: Health.NORMAL,
+    description: "모든 Job 목록을 조회합니다. (USER 또는 ADMIN)",
   })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: "Job 목록 조회 성공 (Health 미포함)",
+    description: "Job 목록 조회 성공",
     type: SuccessResponseDto<JobResponseDto[]>,
     example: {
       meta: {
@@ -206,35 +172,6 @@ export class JobsController {
     },
   })
   @ApiResponse({
-    status: HttpStatus.OK,
-    description: "Job 목록 조회 성공 (Health 포함)",
-    type: SuccessResponseDto<JobWithHealthResponseDto[]>,
-    example: {
-      meta: {
-        requestId: "550e8400-e29b-41d4-a716-446655440000",
-        timestamp: "2026-01-19T11:47:42.123Z",
-      },
-      data: [
-        {
-          id: "550e8400-e29b-41d4-a716-446655440000",
-          name: "API Health Check",
-          isActive: true,
-          scheduleMinutes: 5,
-          timeoutMs: 30000,
-          method: "GET",
-          url: "https://api.example.com/health",
-          headers: null,
-          body: null,
-          nextRunAt: "2026-01-19T12:00:00.000Z",
-          lastHealth: "NORMAL",
-          health: "NORMAL",
-          createdAt: "2026-01-19T11:47:42.123Z",
-          updatedAt: "2026-01-19T11:47:42.123Z",
-        },
-      ],
-    },
-  })
-  @ApiResponse({
     status: HttpStatus.INTERNAL_SERVER_ERROR,
     description: "서버 내부 에러",
     type: ErrorResponseDto,
@@ -249,43 +186,8 @@ export class JobsController {
       },
     },
   })
-  async findAll(
-    @CurrentUser() user: User,
-    @Query("includeHealth", new DefaultValuePipe(false), ParseBoolPipe)
-    includeHealth: boolean,
-    @Query("health", new ParseEnumPipe(Health, { optional: true }))
-    health?: Health,
-  ) {
-    // health 필터링은 includeHealth=true일 때만 유효
-    if (health && !includeHealth) {
-      throw new BadRequestException(
-        "health 필터링은 includeHealth=true일 때만 사용할 수 있습니다.",
-      );
-    }
-
-    const jobs = await this.jobsService.findAll(includeHealth, user.id, user.role);
-
-    if (includeHealth) {
-      // 각 Job의 Health 계산
-      const jobsWithHealth = await Promise.all(
-        jobs.map(async (job) => {
-          const calculatedHealth = await this.healthService.calculateHealth(job.id);
-          return {
-            ...job,
-            health: calculatedHealth,
-          };
-        }),
-      );
-
-      // health 파라미터가 제공되면 필터링
-      if (health) {
-        return jobsWithHealth.filter((job) => job.health === health);
-      }
-
-      return jobsWithHealth;
-    }
-
-    return jobs;
+  async findAll(@CurrentUser() user: User) {
+    return await this.jobsService.findAll(user.id, user.role);
   }
 
   @Get(":id")

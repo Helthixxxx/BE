@@ -14,12 +14,7 @@ import { SignupDto } from "./dto/signup.dto";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshDto } from "./dto/refresh.dto";
 import { LogoutDto } from "./dto/logout.dto";
-import {
-  AuthResponseDto,
-  RefreshResponseDto,
-  LogoutResponseDto,
-  WithdrawResponseDto,
-} from "./dto/auth-response.dto";
+import { AuthResponseDto, RefreshResponseDto } from "./dto/auth-response.dto";
 import { MeResponseDto } from "./dto/me-response.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { CurrentUser } from "./decorators/current-user.decorator";
@@ -28,7 +23,7 @@ import { SuccessResponseDto, ErrorResponseDto } from "../common/types/response-d
 
 /**
  * AuthController
- * 인증 관련 API 엔드포인트
+ * 인증 관련 API
  */
 @ApiTags("auth")
 @Controller("auth")
@@ -303,7 +298,19 @@ export class AuthController {
   @ApiBody({ type: LogoutDto })
   @ApiResponse({
     status: 200,
-    description: "로그아웃 성공 (200 응답으로 성공 확인)",
+    description: "로그아웃 성공",
+    schema: {
+      type: "object",
+      properties: {
+        meta: {
+          type: "object",
+          properties: {
+            requestId: { type: "string", example: "550e8400-e29b-41d4-a716-446655440000" },
+            timestamp: { type: "string", example: "2026-01-19T11:47:42.123Z" },
+          },
+        },
+      },
+    },
     example: {
       meta: {
         requestId: "550e8400-e29b-41d4-a716-446655440000",
@@ -344,7 +351,7 @@ export class AuthController {
       },
     },
   })
-  async logout(@Body() logoutDto: LogoutDto): Promise<LogoutResponseDto> {
+  async logout(@Body() logoutDto: LogoutDto): Promise<void> {
     return this.authService.logout(logoutDto);
   }
 
@@ -360,14 +367,22 @@ export class AuthController {
   @ApiResponse({
     status: 200,
     description: "회원탈퇴 성공",
-    type: SuccessResponseDto<WithdrawResponseDto>,
+    schema: {
+      type: "object",
+      properties: {
+        meta: {
+          type: "object",
+          properties: {
+            requestId: { type: "string", example: "550e8400-e29b-41d4-a716-446655440000" },
+            timestamp: { type: "string", example: "2026-01-19T11:47:42.123Z" },
+          },
+        },
+      },
+    },
     example: {
       meta: {
         requestId: "550e8400-e29b-41d4-a716-446655440000",
         timestamp: "2026-01-19T11:47:42.123Z",
-      },
-      data: {
-        success: true,
       },
     },
   })
@@ -416,7 +431,7 @@ export class AuthController {
       },
     },
   })
-  async withdraw(@CurrentUser() user: User): Promise<WithdrawResponseDto> {
+  async withdraw(@CurrentUser() user: User): Promise<void> {
     return this.authService.withdraw(user);
   }
 

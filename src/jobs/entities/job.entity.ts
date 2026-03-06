@@ -15,10 +15,7 @@ import { Execution } from "../../executions/entities/execution.entity";
 import { NotificationLog } from "../../notification-logs/entities/notification-log.entity";
 import { User } from "../../users/entities/user.entity";
 
-/**
- * Job Entity
- * 감시 대상 정의 (HTTP 호출 스펙 + 실행 주기)
- */
+/** Job Entity */
 @Entity("jobs")
 @Index(["isActive"])
 export class Job {
@@ -61,23 +58,16 @@ export class Job {
   })
   lastHealth: Health | null;
 
-  /**
-   * Job을 생성한 사용자 ID
-   */
+  /** Job을 생성한 사용자 ID */
   @Column({ type: "uuid", name: "user_id" })
   userId: string;
 
-  /**
-   * Job을 생성한 사용자 (관계)
-   */
+  /** Job을 생성한 사용자 (관계) */
   @ManyToOne(() => User, { onDelete: "CASCADE" })
   @JoinColumn({ name: "user_id" })
   user: User;
 
-  /**
-   * 마지막 알림 발송 시각
-   * 쿨다운 정책에 사용 (같은 상태로 전이된 경우 일정 시간 내 재발송 방지)
-   */
+  /** 마지막 알림 발송 시각 */
   @Column({
     type: "timestamptz",
     name: "last_notification_sent_at",
@@ -85,10 +75,7 @@ export class Job {
   })
   lastNotificationSentAt: Date | null;
 
-  /**
-   * 마지막 알림 발송 시 상태
-   * 쿨다운 체크 시 같은 상태인지 확인하는 데 사용
-   */
+  /** 마지막 알림 발송 시 상태 */
   @Column({
     type: "enum",
     enum: Health,

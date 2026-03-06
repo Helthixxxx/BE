@@ -1,9 +1,7 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { ErrorCode } from "./error-code.enum";
 
-/**
- * Swagger 문서용 Meta DTO
- */
+/** Swagger 문서용 Meta DTO */
 export class MetaDto {
   @ApiProperty({
     description: "요청 ID",
@@ -18,9 +16,7 @@ export class MetaDto {
   timestamp: string;
 }
 
-/**
- * Swagger 문서용 에러 DTO
- */
+/** Swagger 문서용 에러 DTO */
 export class ErrorDto {
   @ApiProperty({
     description: "에러 코드",
@@ -46,9 +42,7 @@ export class ErrorDto {
   details?: Record<string, string[]>;
 }
 
-/**
- * Swagger 문서용 성공 응답 Envelope DTO
- */
+/** Swagger 문서용 성공 응답 DTO */
 export class SuccessResponseDto<T> {
   @ApiProperty({ type: MetaDto })
   meta: MetaDto;
@@ -60,9 +54,7 @@ export class SuccessResponseDto<T> {
   data?: T;
 }
 
-/**
- * Swagger 문서용 실패 응답 Envelope DTO
- */
+/** Swagger 문서용 실패 응답 DTO */
 export class ErrorResponseDto {
   @ApiProperty({ type: MetaDto })
   meta: MetaDto;

@@ -11,7 +11,6 @@ import { UserRole } from "../users/entities/user.entity";
 /**
  * ExecutionsService
  * Execution 저장 및 조회 로직
- * cursor 기반 pagination 지원
  */
 @Injectable()
 export class ExecutionsService {
@@ -23,7 +22,7 @@ export class ExecutionsService {
   ) {}
 
   /**
-   * Execution 생성 (스케줄러에서 사용)
+   * Execution 생성
    * executionKey로 중복 실행 방지
    * 트랜잭션과 UNIQUE 제약 조건으로 Race condition 방지
    */
@@ -41,7 +40,7 @@ export class ExecutionsService {
         });
 
         if (existing) {
-          throw new Error(`Execution already exists for key: ${executionKey}`);
+          throw new Error(`이미 존재하는 Execution입니다: ${executionKey}`);
         }
 
         const execution = executionRepo.create({
@@ -50,7 +49,7 @@ export class ExecutionsService {
           startedAt,
           success: false,
           errorType: ExecutionErrorCode.NONE,
-          executionKey, // executionKey 설정
+          executionKey,
         });
 
         return await executionRepo.save(execution);
@@ -58,15 +57,13 @@ export class ExecutionsService {
     } catch (error) {
       // UNIQUE 제약 조건 위반 시에도 동일한 에러 메시지 반환
       if (error instanceof Error && error.message.includes("duplicate key")) {
-        throw new Error(`Execution already exists for key: ${executionKey}`);
+        throw new Error(`이미 존재하는 Execution입니다: ${executionKey}`);
       }
       throw error;
     }
   }
 
-  /**
-   * Execution 결과 업데이트
-   */
+  /** Execution 결과 업데이트 */
   async updateResult(
     executionId: number,
     finishedAt: Date,
@@ -81,7 +78,7 @@ export class ExecutionsService {
     });
 
     if (!execution) {
-      throw new NotFoundException(`Execution with ID ${executionId} not found`);
+      throw new NotFoundException(`Execution을 찾을 수 없습니다: ${executionId}`);
     }
 
     const durationMs = finishedAt.getTime() - execution.startedAt.getTime();
@@ -103,12 +100,7 @@ export class ExecutionsService {
     await this.executionRepository.save(execution);
   }
 
-  /**
-   * Job의 Execution 목록 조회
-   * USER: 자신이 생성한 Job의 Execution만 조회 가능
-   * ADMIN: 모든 Job의 Execution 조회 가능
-   * 정렬: createdAt DESC, id DESC
-   */
+  /** Job의 Execution 목록 조회 */
   async findByJobId(
     jobId: string,
     limit: number = 20,
@@ -116,15 +108,12 @@ export class ExecutionsService {
     userId?: string,
     userRole?: UserRole,
   ): Promise<ExecutionListResponseDto> {
-    // Job 존재 확인 및 접근 권한 확인 (JobsService.findOne에서 권한 검증 수행)
     await this.jobsService.findOne(jobId, userId!, userRole!);
 
     return this.findByJobIdInternal(jobId, limit, cursor);
   }
 
-  /**
-   * Execution 목록 조회 내부 로직
-   */
+  /** Execution 목록 조회 내부 로직 */
   private async findByJobIdInternal(
     jobId: string,
     limit: number = 20,
@@ -199,7 +188,7 @@ export class ExecutionsService {
     const allPreviousExecutions = await this.executionRepository.find({
       where: { jobId },
       order: { createdAt: "DESC", id: "DESC" },
-      take: 100, // 충분히 많이 가져와서 필터링 (최대 20개 execution * 10개 이전 = 200개 필요하지만 안전하게 100개)
+      take: 100,
     });
 
     // 각 execution에 대해 성능 추이 계산
@@ -215,10 +204,7 @@ export class ExecutionsService {
     });
   }
 
-  /**
-   * 성능 추이 계산 (내부 로직)
-   * 메모리에서 이미 조회된 execution 목록을 사용
-   */
+  /** 성능 추이 계산 */
   private calculatePerformanceTrendInternal(
     currentExecution: Execution,
     allPreviousExecutions: Execution[],
@@ -283,32 +269,7 @@ export class ExecutionsService {
     };
   }
 
-  /**
-   * 성능 추이 계산 (단일 execution용, 하위 호환성)
-   * @deprecated calculatePerformanceTrendsBatch를 사용하세요
-   */
-  private async calculatePerformanceTrend(
-    jobId: string,
-    currentExecution: Execution,
-  ): Promise<{
-    previousAvg: number;
-    currentAvg: number;
-    changePercent: number;
-    trend: "improved" | "stable" | "degraded";
-  } | null> {
-    // 현재 Execution 이전의 Execution들을 조회
-    const allPreviousExecutions = await this.executionRepository.find({
-      where: { jobId },
-      order: { createdAt: "DESC", id: "DESC" },
-      take: 100,
-    });
-
-    return this.calculatePerformanceTrendInternal(currentExecution, allPreviousExecutions);
-  }
-
-  /**
-   * Job의 최근 Execution 목록 조회 (Health 계산용)
-   */
+  /** Job의 최근 Execution 목록 조회 */
   async findRecentByJobId(jobId: string, limit: number = 10): Promise<Execution[]> {
     return await this.executionRepository.find({
       where: { jobId },

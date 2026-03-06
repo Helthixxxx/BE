@@ -4,7 +4,6 @@ import { JobsService } from "../jobs/jobs.service";
 import { JobExecutorService } from "./job-executor.service";
 
 /**
- * JobSchedulerService
  * @nestjs/schedule 기반 Job 스케줄링
  * 분 단위로 실행하여 scheduleMinutes에 맞는 Job 실행
  */
@@ -15,9 +14,7 @@ export class JobSchedulerService implements OnModuleInit {
     private readonly jobExecutorService: JobExecutorService,
   ) {}
 
-  /**
-   * 모듈 초기화 시 활성 Job 로드 및 nextRunAt 설정
-   */
+  /** 모듈 초기화 시 활성 Job 로드 및 nextRunAt 설정 */
   async onModuleInit() {
     await this.initializeJobs();
   }
@@ -65,9 +62,7 @@ export class JobSchedulerService implements OnModuleInit {
         const scheduledAt = job.nextRunAt; // 정확한 실행 시간
 
         // 비동기 실행 (await 하지 않음 - 병렬 처리)
-        this.jobExecutorService.executeJob(job, scheduledAt).catch(() => {
-          // 에러 무시 (executeJob 내부에서 처리)
-        });
+        this.jobExecutorService.executeJob(job, scheduledAt).catch(() => {});
 
         // 다음 실행 시간 계산 및 업데이트 (현재 nextRunAt 기준으로 다음 스케줄 계산)
         const nextRunAt = this.calculateNextRunAt(job.nextRunAt, job.scheduleMinutes);
@@ -76,15 +71,10 @@ export class JobSchedulerService implements OnModuleInit {
     }
   }
 
-  /**
-   * 다음 실행 시간 계산
-   * baseTime으로부터 정확히 scheduleMinutes를 더함 (초와 밀리초 유지)
-   * 예: 1시23분12초 + 5분 = 1시28분12초
-   */
+  /** 다음 실행 시간 계산 */
   private calculateNextRunAt(baseTime: Date, scheduleMinutes: number): Date {
     const next = new Date(baseTime);
     next.setMinutes(next.getMinutes() + scheduleMinutes);
-    // 초와 밀리초는 유지 (정확한 시간 계산)
     return next;
   }
 }

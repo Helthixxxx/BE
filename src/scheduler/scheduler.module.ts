@@ -8,9 +8,7 @@ import { JobsModule } from "../jobs/jobs.module";
 import { ExecutionsModule } from "../executions/executions.module";
 import { HealthModule } from "../health/health.module";
 
-/**
- * HTTP 설정 타입
- */
+/** HTTP 설정 타입 */
 interface HttpConfig {
   timeout: number;
   maxRedirects: number;
@@ -28,7 +26,7 @@ interface HttpConfig {
       useFactory: (configService: ConfigService) => {
         const httpConfigValue = configService.get<HttpConfig>("http");
         if (!httpConfigValue) {
-          throw new Error("HTTP config is not defined");
+          throw new Error("HTTP 설정이 정의되지 않았습니다.");
         }
         return {
           timeout: httpConfigValue.timeout,

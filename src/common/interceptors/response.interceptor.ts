@@ -3,19 +3,12 @@ import { Observable } from "rxjs";
 import { map } from "rxjs/operators";
 import { Request } from "express";
 import { SuccessResponse } from "../types/response.types";
-import { randomUUID } from "crypto";
 
-/**
- * ResponseEnvelopeInterceptor
- * 성공 응답(2xx)을 meta + data 형태의 envelope로 감싸기
- * meta에는 requestId와 timestamp를 포함
- * data가 null이거나 undefined인 경우 data 필드를 포함하지 않음
- */
 @Injectable()
-export class ResponseEnvelopeInterceptor implements NestInterceptor {
+export class ResponseInterceptor implements NestInterceptor {
   intercept<T>(context: ExecutionContext, next: CallHandler): Observable<SuccessResponse<T>> {
     const request = context.switchToHttp().getRequest<Request>();
-    const requestId = request.requestId || randomUUID();
+    const requestId = request.requestId as string;
 
     return next.handle().pipe(
       map((data: T) => {

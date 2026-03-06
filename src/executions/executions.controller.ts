@@ -17,8 +17,7 @@ import { User } from "../users/entities/user.entity";
 
 /**
  * ExecutionsController
- * Execution 조회 API 엔드포인트
- * USER 또는 ADMIN 모두 모든 Job의 Execution 조회 가능
+ * 실행 기록 관리 API
  */
 @ApiTags("executions")
 @Controller("jobs/:jobId/executions")

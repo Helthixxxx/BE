@@ -2,9 +2,7 @@ import { ApiProperty } from "@nestjs/swagger";
 import { HttpMethod } from "../../common/types/http-method.enum";
 import { Health } from "../../common/types/health.enum";
 
-/**
- * Job 응답 DTO
- */
+/** Job 응답 DTO */
 export class JobResponseDto {
   @ApiProperty({
     description: "Job ID (UUID)",
@@ -87,9 +85,7 @@ export class JobResponseDto {
   updatedAt: Date;
 }
 
-/**
- * Job with Health 응답 DTO
- */
+/** Job with Health 응답 DTO */
 export class JobWithHealthResponseDto extends JobResponseDto {
   @ApiProperty({
     description: "현재 Health 상태",
@@ -99,9 +95,7 @@ export class JobWithHealthResponseDto extends JobResponseDto {
   health: Health;
 }
 
-/**
- * Job 목록 응답 DTO
- */
+/** Job 목록 응답 DTO */
 export class JobListResponseDto {
   @ApiProperty({
     description: "Job 목록",
@@ -110,9 +104,7 @@ export class JobListResponseDto {
   items: JobResponseDto[];
 }
 
-/**
- * Job with Health 목록 응답 DTO
- */
+/** Job with Health 목록 응답 DTO */
 export class JobWithHealthListResponseDto {
   @ApiProperty({
     description: "Job 목록 (Health 포함)",

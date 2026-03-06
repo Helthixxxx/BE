@@ -11,11 +11,7 @@ import {
 import { Job } from "../../jobs/entities/job.entity";
 import { ExecutionErrorCode } from "../../common/types/execution-error-type.enum";
 
-/**
- * Execution Entity (append-only)
- * Job 실행 1회 기록
- * executionKey로 중복 실행 방지
- */
+/** Execution Entity (append-only) */
 @Entity("executions")
 @Unique(["executionKey"])
 @Index(["jobId", "createdAt", "id"])
@@ -65,7 +61,6 @@ export class Execution {
   /**
    * executionKey: jobId + scheduledAt 기반으로 생성
    * 형식: `${jobId}:${scheduledAt.toISOString()}`
-   * UNIQUE 제약으로 중복 실행 방지
    */
   @Column({ type: "varchar", length: 255, name: "execution_key" })
   executionKey: string;

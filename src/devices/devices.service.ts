@@ -17,11 +17,7 @@ export class DevicesService {
     private readonly dataSource: DataSource,
   ) {}
 
-  /**
-   * Device 등록/업데이트 (Idempotent)
-   * pushToken 기준으로 upsert
-   * deviceId가 제공된 경우 deviceId 기준으로도 매칭 시도
-   */
+  /** Device 등록/업데이트 */
   async upsert(
     createDeviceDto: CreateDeviceDto,
     userId: string | null = null,

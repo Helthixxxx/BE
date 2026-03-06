@@ -72,25 +72,3 @@ export class RefreshResponseDto {
   @ApiProperty({ type: TokensDto })
   tokens: TokensDto;
 }
-
-/**
- * 로그아웃 응답 DTO
- */
-export class LogoutResponseDto {
-  @ApiProperty({
-    description: "로그아웃 성공 여부",
-    example: true,
-  })
-  success: boolean;
-}
-
-/**
- * 회원탈퇴 응답 DTO
- */
-export class WithdrawResponseDto {
-  @ApiProperty({
-    description: "회원탈퇴 성공 여부",
-    example: true,
-  })
-  success: boolean;
-}

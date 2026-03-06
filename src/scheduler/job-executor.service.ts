@@ -3,7 +3,6 @@ import { HttpService } from "@nestjs/axios";
 import { AxiosResponse } from "axios";
 import { firstValueFrom } from "rxjs";
 import { ConfigType } from "@nestjs/config";
-import { JobsService } from "../jobs/jobs.service";
 import { ExecutionsService } from "../executions/executions.service";
 import { HealthService } from "../health/health.service";
 import { Job } from "../jobs/entities/job.entity";
@@ -12,7 +11,6 @@ import { ExecutionErrorCode } from "../common/types/execution-error-type.enum";
 import httpConfig from "../config/http.config";
 
 /**
- * JobExecutorService
  * Job 실행 로직 처리
  * HTTP 호출 및 Execution 결과 저장
  */
@@ -20,7 +18,6 @@ import httpConfig from "../config/http.config";
 export class JobExecutorService {
   constructor(
     private readonly httpService: HttpService,
-    private readonly jobsService: JobsService,
     private readonly executionsService: ExecutionsService,
     private readonly healthService: HealthService,
     @Inject(httpConfig.KEY)
@@ -122,7 +119,7 @@ export class JobExecutorService {
         const responseData = JSON.stringify(response.data);
         responseSnippet = responseData.substring(0, 1024);
       } catch {
-        // JSON 변환 실패 시 무시 (에러 변수 사용하지 않음)
+        // JSON 변환 실패 시 무시
       }
 
       return {
@@ -135,7 +132,7 @@ export class JobExecutorService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
-      // error 객체에서 code 추출 (타입 안전하게)
+      // error 객체에서 code 추출
       let errorCode: string | undefined;
       if (error && typeof error === "object" && "code" in error) {
         const code = (error as { code?: unknown }).code;

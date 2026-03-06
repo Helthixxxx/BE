@@ -14,7 +14,6 @@ import { Request, Response } from "express";
 import { ValidationError } from "class-validator";
 import { ErrorCode } from "../types/error-code.enum";
 import { ErrorDetails } from "../types/response.types";
-import { randomUUID } from "crypto";
 
 /**
  * HttpException 응답 타입
@@ -26,11 +25,83 @@ interface HttpExceptionResponse {
   details?: Record<string, string[]>;
 }
 
+type BadRequestMessageRule = {
+  result: string;
+  test: (normalizedMessage: string) => boolean;
+};
+
+const BAD_REQUEST_ALLOWED_MESSAGES = new Set([
+  "JSON 형식이 올바르지 않습니다.",
+  "요청 본문이 필요합니다.",
+  "요청 본문은 객체 형태여야 합니다.",
+  "잘못된 요청입니다.",
+]);
+
+const BAD_REQUEST_MESSAGE_RULES: BadRequestMessageRule[] = [
+  {
+    result: "요청 본문은 객체 형태여야 합니다.",
+    test: (s) =>
+      s.includes("is not valid json") &&
+      (s.includes("unexpected token '\"'") || s.includes('unexpected token "')),
+  },
+  {
+    result: "요청 본문은 객체 형태여야 합니다.",
+    test: (s) =>
+      s.includes("unexpected token") &&
+      s.includes("at position 0") &&
+      [
+        'unexpected token "',
+        "unexpected token '\"'",
+        "unexpected token 0",
+        "unexpected token 1",
+        "unexpected token 2",
+        "unexpected token 3",
+        "unexpected token 4",
+        "unexpected token 5",
+        "unexpected token 6",
+        "unexpected token 7",
+        "unexpected token 8",
+        "unexpected token 9",
+        "unexpected token t",
+        "unexpected token f",
+        "unexpected token n",
+        "unexpected token -",
+        "unexpected number",
+        "unexpected string",
+      ].some((keyword) => s.includes(keyword)),
+  },
+  {
+    result: "JSON 형식이 올바르지 않습니다.",
+    test: (s) =>
+      s.includes("unexpected token") ||
+      s.includes("is not valid json") ||
+      s.includes("json at position"),
+  },
+  {
+    result: "요청 본문이 필요합니다.",
+    test: (s) =>
+      s.includes("unexpected end of json input") ||
+      s.includes("request body is required") ||
+      s.includes("body is required"),
+  },
+  {
+    result: "요청 본문은 객체 형태여야 합니다.",
+    test: (s) =>
+      s.includes("must be an object") ||
+      s.includes("body must be an object") ||
+      s.includes("should be an object"),
+  },
+];
+
 /**
  * ValidationError 여부 확인
  */
 function isValidationError(obj: unknown): obj is ValidationError {
   return typeof obj === "object" && obj !== null && "property" in obj && "constraints" in obj;
+}
+
+function isErrorCode(value: unknown): value is ErrorCode {
+  return typeof value === "string" && Object.values(ErrorCode).includes(value as ErrorCode);
 }
 
 /**
@@ -44,7 +115,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
-    const requestId = request.requestId || randomUUID();
+    const requestId = request.requestId as string;
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let errorCode: ErrorCode = ErrorCode.INTERNAL_SERVER_ERROR;
@@ -70,69 +141,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     /** BadRequest 에러 메시지 정제 - JSON 파싱 에러 등을 사용자 친화적 메시지로 변환 */
     const sanitizeBadRequestMessage = (raw: string): string => {
-      const allowed = new Set([
-        "JSON 형식이 올바르지 않습니다.",
-        "요청 본문이 필요합니다.",
-        "요청 본문은 객체 형태여야 합니다.",
-        "잘못된 요청입니다.",
-      ]);
-      if (allowed.has(raw)) return raw;
+      if (BAD_REQUEST_ALLOWED_MESSAGES.has(raw)) return raw;
 
       const s = raw.toLowerCase();
-
-      if (
-        s.includes("is not valid json") &&
-        (s.includes("unexpected token '\"'") || s.includes('unexpected token "'))
-      ) {
-        return "요청 본문은 객체 형태여야 합니다.";
-      }
-      if (
-        s.includes("unexpected token") &&
-        s.includes("at position 0") &&
-        (s.includes('unexpected token "') ||
-          s.includes("unexpected token '\"'") ||
-          s.includes("unexpected token 0") ||
-          s.includes("unexpected token 1") ||
-          s.includes("unexpected token 2") ||
-          s.includes("unexpected token 3") ||
-          s.includes("unexpected token 4") ||
-          s.includes("unexpected token 5") ||
-          s.includes("unexpected token 6") ||
-          s.includes("unexpected token 7") ||
-          s.includes("unexpected token 8") ||
-          s.includes("unexpected token 9") ||
-          s.includes("unexpected token t") ||
-          s.includes("unexpected token f") ||
-          s.includes("unexpected token n") ||
-          s.includes("unexpected token -") ||
-          s.includes("unexpected number") ||
-          s.includes("unexpected string"))
-      ) {
-        return "요청 본문은 객체 형태여야 합니다.";
-      }
-
-      if (
-        s.includes("unexpected token") ||
-        s.includes("is not valid json") ||
-        s.includes("json at position")
-      ) {
-        return "JSON 형식이 올바르지 않습니다.";
-      }
-
-      if (
-        s.includes("unexpected end of json input") ||
-        s.includes("request body is required") ||
-        s.includes("body is required")
-      ) {
-        return "요청 본문이 필요합니다.";
-      }
-
-      if (
-        s.includes("must be an object") ||
-        s.includes("body must be an object") ||
-        s.includes("should be an object")
-      ) {
-        return "요청 본문은 객체 형태여야 합니다.";
+      for (const rule of BAD_REQUEST_MESSAGE_RULES) {
+        if (rule.test(s)) {
+          return rule.result;
+        }
       }
 
       return "잘못된 요청입니다.";
@@ -200,7 +215,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
               details = this.formatValidationErrorsFromStrings(stringMessages);
               message = "유효성 검사에 실패했습니다.";
             } else {
-              errorCode = (responseObj.error as ErrorCode) || ErrorCode.BAD_REQUEST;
+              errorCode = this.resolveErrorCode(responseObj.error, ErrorCode.BAD_REQUEST);
               message = getMessageFromResponse(exceptionResponse, "오류가 발생했습니다.");
             }
           }
@@ -209,10 +224,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
             errorCode = ErrorCode.INTERNAL_SERVER_ERROR;
             message = "서버 내부 오류가 발생했습니다.";
           } else {
-            errorCode =
-              (responseObj.code as ErrorCode) ||
-              (responseObj.error as ErrorCode) ||
-              ErrorCode.BAD_REQUEST;
+            errorCode = this.resolveErrorCode(
+              responseObj.code,
+              this.resolveErrorCode(responseObj.error),
+            );
             message = getMessageFromResponse(exceptionResponse, "오류가 발생했습니다.");
           }
           details = responseObj.details;
@@ -246,9 +261,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const details: ErrorDetails = {};
 
     for (const error of validationErrors) {
-      if (error.constraints) {
-        details[error.property] = Object.values(error.constraints);
-      }
+      this.appendValidationErrorDetails(error, details);
     }
 
     return details;
@@ -286,14 +299,58 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       return "유효성 검사에 실패했습니다.";
     }
 
-    const firstError = validationErrors[0];
-    if (firstError.constraints) {
-      const constraintValues = Object.values(firstError.constraints);
+    for (const validationError of validationErrors) {
+      const foundMessage = this.findFirstConstraintMessage(validationError);
+      if (foundMessage) {
+        return foundMessage;
+      }
+    }
+
+    return "유효성 검사에 실패했습니다.";
+  }
+
+  private resolveErrorCode(value: unknown, fallback: ErrorCode = ErrorCode.BAD_REQUEST): ErrorCode {
+    if (isErrorCode(value)) {
+      return value;
+    }
+    return fallback;
+  }
+
+  private appendValidationErrorDetails(
+    error: ValidationError,
+    details: ErrorDetails,
+    parentPath?: string,
+  ): void {
+    const currentPath = parentPath ? `${parentPath}.${error.property}` : error.property;
+
+    if (error.constraints) {
+      details[currentPath] = Object.values(error.constraints);
+    }
+
+    if (error.children && error.children.length > 0) {
+      for (const child of error.children) {
+        this.appendValidationErrorDetails(child, details, currentPath);
+      }
+    }
+  }
+
+  private findFirstConstraintMessage(error: ValidationError): string | undefined {
+    if (error.constraints) {
+      const constraintValues = Object.values(error.constraints);
       if (constraintValues.length > 0) {
         return constraintValues[0];
       }
     }
 
-    return "유효성 검사에 실패했습니다.";
+    if (error.children && error.children.length > 0) {
+      for (const child of error.children) {
+        const foundMessage = this.findFirstConstraintMessage(child);
+        if (foundMessage) {
+          return foundMessage;
+        }
+      }
+    }
+
+    return undefined;
   }
 }

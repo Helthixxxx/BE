@@ -1,9 +1,7 @@
 import { InternalServerErrorException } from "@nestjs/common";
 import { CorsOptions } from "@nestjs/common/interfaces/external/cors-options.interface";
 
-/**
- * CORS 설정 옵션 생성
- */
+/** CORS 설정 옵션 */
 export function buildCorsOptions(): CorsOptions {
   const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || [];
 

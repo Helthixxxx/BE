@@ -2,10 +2,7 @@ import { IsUUID, IsEnum, IsString, IsNotEmpty, IsDate, IsOptional } from "class-
 import { Health } from "../../common/types/health.enum";
 import { Type } from "class-transformer";
 
-/**
- * CreateNotificationLogDto
- * NotificationLog 생성 시 사용하는 DTO
- */
+/** NotificationLog 생성 DTO */
 export class CreateNotificationLogDto {
   @IsUUID()
   jobId: string;
@@ -15,14 +12,15 @@ export class CreateNotificationLogDto {
   prevHealth: Health | null;
 
   @IsEnum(Health)
-  @IsNotEmpty()
+  @IsNotEmpty({ message: "nextHealth는 필수 입력 필드입니다." })
   nextHealth: Health;
 
   @IsString()
-  @IsNotEmpty()
+  @IsNotEmpty({ message: "reason는 필수 입력 필드입니다." })
   reason: string;
 
   @IsDate()
+  @IsNotEmpty({ message: "sentAt는 필수 입력 필드입니다." })
   @Type(() => Date)
   sentAt: Date;
 

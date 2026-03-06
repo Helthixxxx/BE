@@ -9,10 +9,6 @@ import { JwtStrategy } from "./strategies/jwt.strategy";
 import { User } from "../users/entities/user.entity";
 import jwtConfig from "../config/jwt.config";
 
-/**
- * AuthModule
- * 인증 관련 모듈
- */
 @Module({
   imports: [
     TypeOrmModule.forFeature([User]),
@@ -24,7 +20,7 @@ import jwtConfig from "../config/jwt.config";
         const secret = configService.get<string>("jwt.access.secret");
         const expiresIn = configService.get<string>("jwt.access.expiresIn");
         if (!secret || !expiresIn) {
-          throw new Error("JWT access secret or expiresIn is not defined");
+          throw new Error("JWT 암호화 키 또는 만료 시간이 설정되지 않았습니다.");
         }
         return {
           secret,

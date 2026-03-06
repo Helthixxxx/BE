@@ -1,7 +1,5 @@
 /**
- * NotificationStrategy 인터페이스
- * 다양한 알림 타입(Push, Email, Slack 등)을 위한 전략 패턴 인터페이스
- */
+ * NotificationStrategy 인터페이스 */
 export interface NotificationPayload {
   notificationLogId: string;
   jobId: string;
@@ -21,13 +19,9 @@ export interface NotificationResult {
 }
 
 export interface NotificationStrategy {
-  /**
-   * 알림 발송
-   */
+  /** 알림 발송 */
   send(payload: NotificationPayload): Promise<NotificationResult>;
 
-  /**
-   * 설정 검증
-   */
+  /** 설정 검증 */
   validate(): boolean;
 }

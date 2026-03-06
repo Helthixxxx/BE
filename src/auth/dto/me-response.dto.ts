@@ -35,10 +35,4 @@ export class MeResponseDto {
     example: "2026-01-19T11:47:42.123Z",
   })
   createdAt: Date;
-
-  @ApiProperty({
-    description: "수정일시",
-    example: "2026-01-19T11:47:42.123Z",
-  })
-  updatedAt: Date;
 }

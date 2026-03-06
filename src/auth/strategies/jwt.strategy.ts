@@ -28,7 +28,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   ) {
     const secret = configService.get<string>("jwt.access.secret");
     if (!secret) {
-      throw new Error("JWT access secret is not defined");
+      throw new Error("JWT 암호화 키가 설정되지 않았습니다.");
     }
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),

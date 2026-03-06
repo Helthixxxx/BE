@@ -13,13 +13,11 @@ import { Job } from "../jobs/entities/job.entity";
 /**
  * HealthService
  * Health 상태 계산 및 상태 전이 감지
- * Health는 실시간 계산하며 DB에 저장하지 않음
  */
 @Injectable()
 export class HealthService {
-  // 쿨다운 시간 (밀리초)
-  private readonly COOLDOWN_FAILED_MS = 30 * 60 * 1000; // 30분
-  private readonly COOLDOWN_RECOVERY_MS = 60 * 60 * 1000; // 1시간
+  private readonly COOLDOWN_FAILED_MS = 30 * 60 * 1000;
+  private readonly COOLDOWN_RECOVERY_MS = 60 * 60 * 1000;
 
   constructor(
     @Inject(forwardRef(() => JobsService))
@@ -44,9 +42,7 @@ export class HealthService {
     return await this.calculateHealthInternal(job);
   }
 
-  /**
-   * Health 상태 계산 내부 로직
-   */
+  /** Health 상태 계산 내부 로직 */
   private async calculateHealthInternal(job: {
     id: string;
     nextRunAt: Date | null;
@@ -310,12 +306,10 @@ export class HealthService {
     }
   }
 
-  /**
-   * Health 상태 전이 이유 생성
-   */
+  /** Health 상태 전이 이유 생성 */
   private getHealthChangeReason(prevHealth: Health | null, nextHealth: Health): string {
     if (prevHealth === null) {
-      return `Initial health status: ${nextHealth}`;
+      return `초기 상태: ${nextHealth}`;
     }
 
     const reasons: Record<string, string> = {
@@ -323,7 +317,8 @@ export class HealthService {
     };
 
     return (
-      reasons[`${prevHealth}_${nextHealth}`] || `Health changed from ${prevHealth} to ${nextHealth}`
+      reasons[`${prevHealth}_${nextHealth}`] ||
+      `상태가 ${prevHealth}에서 ${nextHealth}로 변경되었습니다.`
     );
   }
 }

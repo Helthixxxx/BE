@@ -12,9 +12,7 @@ import { Device } from "../../devices/entities/device.entity";
 import { NotificationRecipient } from "../../notification-recipients/entities/notification-recipient.entity";
 import { Job } from "../../jobs/entities/job.entity";
 
-/**
- * Expo Push API 응답 타입
- */
+/** Expo Push API 응답 타입 */
 interface ExpoPushTicket {
   status: "ok" | "error";
   id?: string;
@@ -29,10 +27,7 @@ interface ExpoPushResponse {
   data: ExpoPushTicket[];
 }
 
-/**
- * PushNotificationStrategy
- * Expo Push API를 사용한 푸시 알림 발송 전략
- */
+/** Expo Push API를 사용한 푸시 알림 발송 전략 */
 @Injectable()
 export class PushNotificationStrategy implements NotificationStrategy {
   private readonly expoPushApiUrl = "https://exp.host/--/api/v2/push/send";
@@ -48,9 +43,7 @@ export class PushNotificationStrategy implements NotificationStrategy {
     private readonly dataSource: DataSource,
   ) {}
 
-  /**
-   * 알림 발송
-   */
+  /** 알림 발송 */
   async send(payload: NotificationPayload): Promise<NotificationResult> {
     const { notificationLogId, jobId, jobName, prevHealth, nextHealth, reason } = payload;
 
@@ -121,9 +114,7 @@ export class PushNotificationStrategy implements NotificationStrategy {
     return result;
   }
 
-  /**
-   * Expo Push API 응답 처리
-   */
+  /** Expo Push API 응답 처리 */
   private async processResponse(
     devices: Device[],
     tickets: ExpoPushTicket[],
@@ -145,7 +136,6 @@ export class PushNotificationStrategy implements NotificationStrategy {
 
         if (ticket.status === "ok") {
           successCount++;
-          // 성공한 경우 NotificationRecipient 기록
           const recipient = recipientRepo.create({
             notificationLogId,
             deviceId: device.id,
@@ -155,7 +145,6 @@ export class PushNotificationStrategy implements NotificationStrategy {
           });
           await recipientRepo.save(recipient);
         } else {
-          // 실패한 경우
           const errorMessage = ticket.message || ticket.details?.error || "Unknown error";
           errors.push({
             recipientId: device.id,
@@ -214,10 +203,7 @@ export class PushNotificationStrategy implements NotificationStrategy {
     };
   }
 
-  /**
-   * 에러 처리
-   * 배치 저장으로 최적화
-   */
+  /** 에러 처리 */
   private async processError(
     devices: Device[],
     notificationLogId: string,
@@ -254,9 +240,7 @@ export class PushNotificationStrategy implements NotificationStrategy {
     };
   }
 
-  /**
-   * 알림 제목 생성
-   */
+  /** 알림 제목 생성 */
   private getNotificationTitle(prevHealth: string | null, nextHealth: string): string {
     if (nextHealth === "FAILED") {
       return "🚨 서비스 장애 발생";
@@ -266,18 +250,13 @@ export class PushNotificationStrategy implements NotificationStrategy {
     return "📊 서비스 상태 변경";
   }
 
-  /**
-   * 알림 본문 생성
-   */
+  /** 알림 본문 생성 */
   private getNotificationBody(jobName: string, reason: string): string {
     return `${jobName}\n${reason}`;
   }
 
-  /**
-   * 설정 검증
-   */
+  /** 설정 검증 */
   validate(): boolean {
-    // Expo Push API는 별도 인증이 필요 없으므로 항상 true
     return true;
   }
 }

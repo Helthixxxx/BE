@@ -14,20 +14,11 @@ import { SignupDto } from "./dto/signup.dto";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshDto } from "./dto/refresh.dto";
 import { LogoutDto } from "./dto/logout.dto";
-import {
-  AuthResponseDto,
-  RefreshResponseDto,
-  LogoutResponseDto,
-  WithdrawResponseDto,
-} from "./dto/auth-response.dto";
+import { AuthResponseDto, RefreshResponseDto } from "./dto/auth-response.dto";
 import { MeResponseDto } from "./dto/me-response.dto";
 import { JwtPayload } from "./strategies/jwt.strategy";
 import { bcryptConfig } from "../config/jwt.config";
 
-/**
- * AuthService
- * 인증 관련 비즈니스 로직 처리
- */
 @Injectable()
 export class AuthService {
   constructor(
@@ -38,19 +29,13 @@ export class AuthService {
     private dataSource: DataSource,
   ) {}
 
-  /**
-   * 회원가입
-   * provider='local' 고정, (provider, providerId) 중복 체크
-   * 가입 즉시 로그인 처리 (accessToken + refreshToken 발급)
-   * 트랜잭션으로 일관성 보장
-   */
+  /** 회원가입 */
   async signup(signupDto: SignupDto): Promise<AuthResponseDto> {
     const { providerId, password } = signupDto;
 
     return await this.dataSource.transaction(async (manager) => {
       const userRepo = manager.getRepository(User);
 
-      // 중복 체크: (provider='local', providerId)
       const existingUser = await userRepo.findOne({
         where: { provider: "local", providerId },
       });
@@ -62,7 +47,7 @@ export class AuthService {
       // 비밀번호 해시
       const passwordHash = await bcrypt.hash(password, bcryptConfig.saltRounds);
 
-      // User 생성 (USER role 기본값)
+      // User 생성
       const user = userRepo.create({
         provider: "local",
         providerId,
@@ -87,12 +72,7 @@ export class AuthService {
     });
   }
 
-  /**
-   * 로그인
-   * user 조회 by (provider='local', providerId) + bcrypt compare
-   * accessToken + refreshToken 발급 및 refreshTokenHash 갱신(회전)
-   * 트랜잭션으로 일관성 보장
-   */
+  /** 로그인 */
   async login(loginDto: LoginDto): Promise<AuthResponseDto> {
     const { providerId, password } = loginDto;
 
@@ -105,7 +85,6 @@ export class AuthService {
       });
 
       if (!user) {
-        // 보안: 과도한 사유 노출 금지
         throw new UnauthorizedException("아이디 또는 비밀번호가 일치하지 않습니다.");
       }
 
@@ -113,7 +92,6 @@ export class AuthService {
       const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
 
       if (!isPasswordValid) {
-        // 보안: 과도한 사유 노출 금지
         throw new UnauthorizedException("아이디 또는 비밀번호가 일치하지 않습니다.");
       }
 
@@ -132,11 +110,7 @@ export class AuthService {
     });
   }
 
-  /**
-   * Refresh Token으로 Access Token 재발급
-   * refreshToken 검증 → accessToken 재발급 → refreshToken 회전
-   * 트랜잭션으로 일관성 보장
-   */
+  /** Refresh Token으로 Access Token 재발급 */
   async refresh(refreshDto: RefreshDto): Promise<RefreshResponseDto> {
     const { refreshToken } = refreshDto;
 
@@ -194,45 +168,28 @@ export class AuthService {
     }
   }
 
-  /**
-   * 로그아웃
-   * best-effort 로그아웃: refreshToken이 정상 검증되면 refreshTokenHash를 NULL로 폐기
-   * 검증 실패해도 200 응답 (멱등)
-   */
-  async logout(logoutDto: LogoutDto): Promise<LogoutResponseDto> {
+  /** 로그아웃 */
+  async logout(logoutDto: LogoutDto): Promise<void> {
     const { refreshToken } = logoutDto;
 
-    try {
-      // Refresh Token 검증
-      const payload = this.jwtService.verify<{ sub: string }>(refreshToken, {
-        secret: this.configService.get<string>("jwt.refresh.secret"),
-      });
+    // Refresh Token 검증
+    const payload = this.jwtService.verify<{ sub: string }>(refreshToken, {
+      secret: this.configService.get<string>("jwt.refresh.secret"),
+    });
 
-      // 사용자 조회 및 refreshTokenHash 폐기
-      const user = await this.userRepository.findOne({
-        where: { id: payload.sub },
-      });
+    // 사용자 조회 및 refreshTokenHash 폐기
+    const user = await this.userRepository.findOne({
+      where: { id: payload.sub },
+    });
 
-      if (user) {
-        user.refreshTokenHash = null;
-        await this.userRepository.save(user);
-      }
-    } catch {
-      // 검증 실패해도 200 응답 (멱등)
-      // 보안상 refreshTokenHash를 지우는 대상 user를 확정할 수 없는 경우 DB 변경 없이 처리
+    if (user) {
+      user.refreshTokenHash = null;
+      await this.userRepository.save(user);
     }
-
-    // 200 응답으로 성공을 확인하므로 data 필드 없이 반환
-    return null as unknown as LogoutResponseDto;
   }
 
-  /**
-   * 회원탈퇴
-   * 인증된 사용자 계정을 삭제합니다.
-   * - refreshTokenHash 초기화 후 User 삭제
-   * - Job은 CASCADE 삭제, Device는 userId SET NULL
-   */
-  async withdraw(user: User): Promise<WithdrawResponseDto> {
+  /** 회원탈퇴 */
+  async withdraw(user: User): Promise<void> {
     const foundUser = await this.userRepository.findOne({
       where: { id: user.id },
     });
@@ -241,18 +198,10 @@ export class AuthService {
       throw new NotFoundException("사용자를 찾을 수 없습니다.");
     }
 
-    // 세션 무효화 후 삭제
-    foundUser.refreshTokenHash = null;
-    await this.userRepository.save(foundUser);
     await this.userRepository.remove(foundUser);
-
-    return { success: true };
   }
 
-  /**
-   * 내 정보 조회
-   * Access Token으로 인증된 사용자 정보 반환
-   */
+  /** 내 정보 조회 */
   async me(user: User): Promise<MeResponseDto> {
     const foundUser = await this.userRepository.findOne({
       where: { id: user.id },
@@ -262,19 +211,10 @@ export class AuthService {
       throw new NotFoundException("사용자를 찾을 수 없습니다.");
     }
 
-    return {
-      id: foundUser.id,
-      provider: foundUser.provider,
-      providerId: foundUser.providerId,
-      role: foundUser.role,
-      createdAt: foundUser.createdAt,
-      updatedAt: foundUser.updatedAt,
-    };
+    return this.toUserInfo(foundUser);
   }
 
-  /**
-   * Access Token + Refresh Token 생성
-   */
+  /** Access Token + Refresh Token 생성 */
   private generateTokens(user: User): {
     accessToken: string;
     refreshToken: string;
@@ -285,10 +225,7 @@ export class AuthService {
     };
   }
 
-  /**
-   * Access Token 생성
-   * Payload: { sub: userId, role }
-   */
+  /** Access Token 생성  */
   private generateAccessToken(user: User): string {
     const payload: JwtPayload = {
       sub: user.id,
@@ -298,7 +235,7 @@ export class AuthService {
     const secret = this.configService.get<string>("jwt.access.secret");
     const expiresIn = this.configService.get<string>("jwt.access.expiresIn");
     if (!secret || !expiresIn) {
-      throw new Error("JWT access secret or expiresIn is not defined");
+      throw new Error("JWT 암호화 키 또는 만료 시간이 설정되지 않았습니다.");
     }
 
     return this.jwtService.sign(payload, {
@@ -307,10 +244,7 @@ export class AuthService {
     } as JwtSignOptions);
   }
 
-  /**
-   * Refresh Token 생성
-   * Payload: { sub: userId }
-   */
+  /** Refresh Token 생성 */
   private generateRefreshToken(user: User): string {
     const payload = {
       sub: user.id,
@@ -319,7 +253,7 @@ export class AuthService {
     const secret = this.configService.get<string>("jwt.refresh.secret");
     const expiresIn = this.configService.get<string>("jwt.refresh.expiresIn");
     if (!secret || !expiresIn) {
-      throw new Error("JWT refresh secret or expiresIn is not defined");
+      throw new Error("JWT 암호화 키 또는 만료 시간이 설정되지 않았습니다.");
     }
 
     return this.jwtService.sign(payload, {
@@ -328,9 +262,7 @@ export class AuthService {
     } as JwtSignOptions);
   }
 
-  /**
-   * User 엔티티를 UserInfoDto로 변환 (민감 정보 제외)
-   */
+  /** User 엔티티를 UserInfoDto로 변환 (민감 정보 제외) */
   private toUserInfo(user: User): {
     id: string;
     provider: string;

@@ -1,15 +1,9 @@
 import { IsString, IsOptional, IsEnum, Matches, IsUUID } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
-/**
- * Device 등록 DTO
- * 로그인 전/후 모두 토큰 등록 가능 (인증 선택적)
- */
+/** Device 등록 DTO */
 export class CreateDeviceDto {
-  /**
-   * Expo Push Token
-   * 형식: ExponentPushToken[...]
-   */
+  /** Expo Push Token */
   @ApiProperty({
     description: "Expo Push Token",
     example: "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]",
@@ -20,10 +14,7 @@ export class CreateDeviceDto {
   })
   pushToken: string;
 
-  /**
-   * 사용자 ID (선택적)
-   * DB에 저장 또는 업데이트 시 사용
-   */
+  /** 사용자 ID */
   @ApiPropertyOptional({
     description: "사용자 ID",
     example: "123e4567-e89b-12d3-a456-426614174000",
@@ -32,10 +23,7 @@ export class CreateDeviceDto {
   @IsUUID()
   userId?: string;
 
-  /**
-   * 앱에서 생성한 기기 고유 ID (선택적)
-   * 로그인 전 토큰과 로그인 후 토큰을 매칭하는 데 사용
-   */
+  /** 앱에서 생성한 기기 고유 ID */
   @ApiPropertyOptional({
     description: "앱에서 생성한 기기 고유 ID",
     example: "device-uuid-12345",
@@ -44,10 +32,7 @@ export class CreateDeviceDto {
   @IsString()
   deviceId?: string;
 
-  /**
-   * 플랫폼 타입
-   * 현재는 'ios'만 지원
-   */
+  /** 플랫폼 타입 */
   @ApiPropertyOptional({
     description: "플랫폼 타입",
     enum: ["ios", "android"],

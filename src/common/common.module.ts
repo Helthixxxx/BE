@@ -2,7 +2,7 @@ import { Module, NestModule, MiddlewareConsumer, RequestMethod } from "@nestjs/c
 import { APP_FILTER, APP_INTERCEPTOR } from "@nestjs/core";
 import { RequestIdMiddleware } from "./middleware/request-id.middleware";
 import { GlobalExceptionFilter } from "./filters/global-exception.filter";
-import { ResponseEnvelopeInterceptor } from "./interceptors/response-envelope.interceptor";
+import { ResponseInterceptor } from "./interceptors/response.interceptor";
 
 /**
  * CommonModule
@@ -16,7 +16,7 @@ import { ResponseEnvelopeInterceptor } from "./interceptors/response-envelope.in
     },
     {
       provide: APP_INTERCEPTOR,
-      useClass: ResponseEnvelopeInterceptor,
+      useClass: ResponseInterceptor,
     },
   ],
 })

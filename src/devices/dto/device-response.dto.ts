@@ -1,8 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
-/**
- * Device 응답 DTO
- */
+/** Device 응답 DTO */
 export class DeviceResponseDto {
   @ApiProperty({ description: "Device ID" })
   id: string;

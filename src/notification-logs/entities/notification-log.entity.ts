@@ -13,10 +13,6 @@ import { Health } from "../../common/types/health.enum";
 
 import { NotificationRecipient } from "../../notification-recipients/entities/notification-recipient.entity";
 
-/**
- * NotificationLog Entity
- * Health 상태 전이 시 알림 발송 기록
- */
 @Entity("notification_logs")
 @Index(["jobId", "sentAt"])
 export class NotificationLog {
@@ -60,6 +56,7 @@ export class NotificationLog {
     length: 50,
     name: "notification_type",
     default: "push",
+    enum: ["push", "email", "slack", "webhook"],
   })
   notificationType: string;
 
@@ -74,12 +71,11 @@ export class NotificationLog {
     type: "varchar",
     length: 50,
     default: "pending",
+    enum: ["pending", "sent", "failed", "skipped"],
   })
   status: string;
 
-  /**
-   * 에러 메시지 (실패 시)
-   */
+  /** 에러 메시지 */
   @Column({
     type: "varchar",
     length: 500,
@@ -88,10 +84,7 @@ export class NotificationLog {
   })
   errorMessage: string | null;
 
-  /**
-   * 수신자 수
-   * 실제 발송 대상 수 (Device 수 또는 User 수)
-   */
+  /** 수신자 수 */
   @Column({
     type: "int",
     name: "recipient_count",

@@ -12,17 +12,14 @@ import {
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { HttpMethod } from "../../common/types/http-method.enum";
 
-/**
- * CreateJobDto
- * Job 생성 시 사용하는 DTO
- */
+/** Job 생성 DTO */
 export class CreateJobDto {
   @ApiProperty({
     description: "Job 이름",
     example: "API Health Check",
   })
   @IsString()
-  @IsNotEmpty()
+  @IsNotEmpty({ message: "Job 이름은 필수 입력 필드입니다." })
   name: string;
 
   @ApiProperty({
@@ -31,7 +28,7 @@ export class CreateJobDto {
     minimum: 1,
   })
   @IsInt()
-  @Min(1)
+  @Min(1, { message: "실행 주기는 1분 이상이어야 합니다." })
   scheduleMinutes: number;
 
   @ApiProperty({

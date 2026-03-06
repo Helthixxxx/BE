@@ -17,8 +17,8 @@ export class ExecutionQueryDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @Min(1)
-  @Max(100)
+  @Min(1, { message: "페이지 크기는 1 이상이어야 합니다." })
+  @Max(100, { message: "페이지 크기는 100 이하이어야 합니다." })
   limit?: number = 20;
 
   @ApiPropertyOptional({
