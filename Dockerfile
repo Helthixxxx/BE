@@ -36,7 +36,8 @@ WORKDIR /app
 COPY package*.json ./
 
 # 프로덕션 의존성만 설치 (devDependencies 제외)
-RUN npm ci --only=production && npm cache clean --force
+# --ignore-scripts: prepare(husky) 등 lifecycle 스크립트 스킵 (husky는 devDependency라 설치 안 됨)
+RUN npm ci --only=production --ignore-scripts && npm cache clean --force
 
 # builder 스테이지에서 빌드된 파일 복사
 COPY --from=builder /app/dist ./dist
