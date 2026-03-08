@@ -14,16 +14,16 @@ import { ApiLogsModule } from "../api-logs/api-logs.module";
   imports: [ApiLogsModule],
   providers: [
     {
+      provide: APP_INTERCEPTOR,
+      useClass: LoggingInterceptor,
+    },
+    {
       provide: APP_FILTER,
       useClass: GlobalExceptionFilter,
     },
     {
       provide: APP_INTERCEPTOR,
       useClass: ResponseInterceptor,
-    },
-    {
-      provide: APP_INTERCEPTOR,
-      useClass: LoggingInterceptor,
     },
   ],
 })
