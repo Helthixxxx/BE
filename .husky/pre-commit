@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+# pre-commit: 테스트 실행 강제
+npm test

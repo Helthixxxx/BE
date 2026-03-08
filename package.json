@@ -21,7 +21,8 @@
     "typeorm": "typeorm-ts-node-commonjs",
     "migration:generate": "npm run typeorm -- migration:generate -d ormconfig.ts",
     "migration:run": "npm run typeorm -- migration:run -d ormconfig.ts",
-    "migration:revert": "npm run typeorm -- migration:revert -d ormconfig.ts"
+    "migration:revert": "npm run typeorm -- migration:revert -d ormconfig.ts",
+    "prepare": "husky"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",
@@ -69,8 +70,10 @@
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",
     "globals": "^16.0.0",
+    "husky": "^9.1.7",
     "jest": "^29.7.0",
     "prettier": "^3.4.2",
+    "should": "^13.2.3",
     "source-map-support": "^0.5.21",
     "supertest": "^7.0.0",
     "ts-jest": "^29.2.5",
@@ -92,9 +95,33 @@
       "^.+\\.(t|j)s$": "ts-jest"
     },
     "collectCoverageFrom": [
-      "**/*.(t|j)s"
+      "**/auth.service.ts",
+      "**/jobs.service.ts",
+      "**/executions.service.ts",
+      "**/health.service.ts",
+      "**/api-logs.service.ts",
+      "**/devices.service.ts",
+      "**/job-scheduler.service.ts",
+      "**/job-executor.service.ts",
+      "**/log-cleanup.service.ts",
+      "**/health.controller.ts",
+      "**/dto/cursor.dto.ts",
+      "!**/*.module.ts",
+      "!**/main.ts",
+      "!**/migrations/**"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "coverageThreshold": {
+      "global": {
+        "branches": 55,
+        "functions": 80,
+        "lines": 80,
+        "statements": 80
+      }
+    },
+    "testEnvironment": "node",
+    "moduleNameMapper": {
+      "^@/(.*)$": "<rootDir>/$1"
+    }
   }
 }
