@@ -4,9 +4,11 @@ import { HttpModule } from "@nestjs/axios";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { JobSchedulerService } from "./job-scheduler.service";
 import { JobExecutorService } from "./job-executor.service";
+import { LogCleanupService } from "./log-cleanup.service";
 import { JobsModule } from "../jobs/jobs.module";
 import { ExecutionsModule } from "../executions/executions.module";
 import { HealthModule } from "../health/health.module";
+import { ApiLogsModule } from "../api-logs/api-logs.module";
 
 /** HTTP 설정 타입 */
 interface HttpConfig {
@@ -38,7 +40,8 @@ interface HttpConfig {
     JobsModule,
     ExecutionsModule,
     HealthModule,
+    ApiLogsModule,
   ],
-  providers: [JobSchedulerService, JobExecutorService],
+  providers: [JobSchedulerService, JobExecutorService, LogCleanupService],
 })
 export class SchedulerModule {}

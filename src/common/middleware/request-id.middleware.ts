@@ -11,6 +11,7 @@ export class RequestIdMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction) {
     const requestId = req.requestId || randomUUID();
     req.requestId = requestId;
+    (req as Request & { startAt?: number }).startAt = Date.now();
     next();
   }
 }

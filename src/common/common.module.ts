@@ -3,12 +3,15 @@ import { APP_FILTER, APP_INTERCEPTOR } from "@nestjs/core";
 import { RequestIdMiddleware } from "./middleware/request-id.middleware";
 import { GlobalExceptionFilter } from "./filters/global-exception.filter";
 import { ResponseInterceptor } from "./interceptors/response.interceptor";
+import { LoggingInterceptor } from "./interceptors/logging.interceptor";
+import { ApiLogsModule } from "../api-logs/api-logs.module";
 
 /**
  * CommonModule
  * 공통 미들웨어, 인터셉터, 필터를 제공하는 모듈
  */
 @Module({
+  imports: [ApiLogsModule],
   providers: [
     {
       provide: APP_FILTER,
@@ -17,6 +20,10 @@ import { ResponseInterceptor } from "./interceptors/response.interceptor";
     {
       provide: APP_INTERCEPTOR,
       useClass: ResponseInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: LoggingInterceptor,
     },
   ],
 })

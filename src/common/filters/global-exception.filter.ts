@@ -14,6 +14,7 @@ import { Request, Response } from "express";
 import { ValidationError } from "class-validator";
 import { ErrorCode } from "../types/error-code.enum";
 import { ErrorDetails } from "../types/response.types";
+import { ApiLogsService } from "../../api-logs/api-logs.service";
 
 /**
  * HttpException 응답 타입
@@ -104,6 +105,8 @@ function isErrorCode(value: unknown): value is ErrorCode {
   return typeof value === "string" && Object.values(ErrorCode).includes(value as ErrorCode);
 }
 
+type RequestWithStartAt = Request & { startAt?: number };
+
 /**
  * GlobalExceptionFilter
  * 모든 예외를 meta + error 형태의 envelope로 통일
@@ -111,6 +114,8 @@ function isErrorCode(value: unknown): value is ErrorCode {
  */
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
+  constructor(private readonly apiLogsService: ApiLogsService) {}
+
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
@@ -251,7 +256,42 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       },
     };
 
+    this.saveErrorLog(request, status, message, errorResponse);
+
     response.status(status).json(errorResponse);
+  }
+
+  private saveErrorLog(
+    request: RequestWithStartAt,
+    statusCode: number,
+    errorMessage: string,
+    errorResponse: object,
+  ): void {
+    if (this.apiLogsService.isExcludedPath(request.path)) {
+      return;
+    }
+
+    const startAt = request.startAt ?? Date.now();
+    const durationMs = Date.now() - startAt;
+    const url = request.originalUrl?.split("?")[0] ?? request.path;
+    const query =
+      Object.keys(request.query ?? {}).length > 0
+        ? (request.query as Record<string, unknown>)
+        : null;
+    const user = request.user as { id?: string } | undefined;
+
+    this.apiLogsService.saveLog({
+      requestId: (request.requestId as string) ?? "",
+      method: request.method,
+      url,
+      query,
+      statusCode,
+      durationMs,
+      requestBody: request.body,
+      responseBody: errorResponse,
+      userId: user?.id ?? undefined,
+      errorMessage,
+    });
   }
 
   /**
