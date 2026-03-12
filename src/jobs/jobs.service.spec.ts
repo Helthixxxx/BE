@@ -8,40 +8,61 @@ import { Health } from "../common/types/health.enum";
 import { HttpMethod } from "../common/types/http-method.enum";
 import { UserRole } from "../users/entities/user.entity";
 
-const mockJob: Partial<Job> = {
+const mockJob: Job = {
   id: "job-1",
   name: "Test Job",
   userId: "user-1",
   isActive: true,
   scheduleMinutes: 5,
+  method: HttpMethod.GET,
+  url: "https://example.com",
+  headers: null,
+  body: null,
   nextRunAt: new Date(),
   lastHealth: Health.NORMAL,
+  user: {} as Job["user"],
+  lastNotificationSentAt: null,
+  lastNotificationHealth: null,
   createdAt: new Date(),
   updatedAt: new Date(),
+  executions: [],
+  notificationLogs: [],
+};
+
+type JobRepoMock = {
+  create: jest.Mock<Job, [Partial<Job>]>;
+  save: jest.Mock<Promise<Job>, [Job]>;
+  find: jest.Mock<Promise<Job[]>, [unknown?]>;
+  findOne: jest.Mock<Promise<Job | null>, [unknown]>;
+  createQueryBuilder: jest.Mock;
+  update: jest.Mock<Promise<unknown>, [string, Partial<Job>]>;
+  remove: jest.Mock<Promise<void>, [Job]>;
 };
 
 describe("JobsService", () => {
   let service: JobsService;
-  let jobRepository: Record<string, jest.Mock>;
-  let dataSource: { transaction: jest.Mock };
+  let jobRepository: JobRepoMock;
+  let dataSource: { transaction: jest.Mock<Promise<Job>, [(manager: unknown) => Promise<Job>]> };
 
   beforeEach(async () => {
     jobRepository = {
-      create: jest.fn().mockImplementation((dto) => ({ ...dto })),
-      save: jest.fn().mockResolvedValue({ ...mockJob }),
-      find: jest.fn(),
-      findOne: jest.fn(),
+      create: jest.fn<Job, [Partial<Job>]>((dto: Partial<Job>) => ({ ...dto }) as Job),
+      save: jest.fn<Promise<Job>, [Job]>().mockResolvedValue({ ...mockJob }),
+      find: jest.fn<Promise<Job[]>, [unknown?]>(),
+      findOne: jest.fn<Promise<Job | null>, [unknown]>(),
       createQueryBuilder: jest.fn().mockReturnValue({
         where: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         getMany: jest.fn().mockResolvedValue([]),
       }),
-      update: jest.fn().mockResolvedValue({ affected: 1 }),
-      remove: jest.fn(),
+      update: jest
+        .fn<Promise<unknown>, [string, Partial<Job>]>()
+        .mockResolvedValue({ affected: 1 }),
+      remove: jest.fn<Promise<void>, [Job]>(),
     };
 
     dataSource = {
-      transaction: jest.fn((fn) =>
+      transaction: jest.fn((fn: (manager: unknown) => Promise<Job>) =>
         fn({
           getRepository: () => jobRepository,
         }),
@@ -184,16 +205,10 @@ describe("JobsService", () => {
       });
       jobRepository.save.mockResolvedValue({ ...mockJob, nextRunAt: new Date() });
 
-      await service.update(
-        "job-1",
-        { isActive: true },
-        "user-1",
-        UserRole.USER,
-      );
+      await service.update("job-1", { isActive: true }, "user-1", UserRole.USER);
 
-      expect(jobRepository.save).toHaveBeenCalledWith(
-        expect.objectContaining({ nextRunAt: expect.any(Date) }),
-      );
+      const savedJob = jobRepository.save.mock.calls[0]?.[0];
+      expect(savedJob.nextRunAt).toBeInstanceOf(Date);
     });
 
     it("scheduleMinutes 변경 시 nextRunAt 재설정", async () => {
@@ -206,12 +221,7 @@ describe("JobsService", () => {
       });
       jobRepository.save.mockResolvedValue({ ...mockJob });
 
-      await service.update(
-        "job-1",
-        { scheduleMinutes: 10 },
-        "user-1",
-        UserRole.USER,
-      );
+      await service.update("job-1", { scheduleMinutes: 10 }, "user-1", UserRole.USER);
 
       expect(jobRepository.save).toHaveBeenCalled();
     });

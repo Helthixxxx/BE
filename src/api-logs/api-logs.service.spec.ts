@@ -4,14 +4,20 @@ import { ConfigService } from "@nestjs/config";
 import { ApiLogsService } from "./api-logs.service";
 import { ApiLog } from "./entities/api-log.entity";
 
+type ApiLogRepositoryMock = {
+  create: jest.Mock<ApiLog, [Partial<ApiLog>]>;
+  save: jest.Mock<Promise<ApiLog>, [ApiLog]>;
+  createQueryBuilder: jest.Mock;
+};
+
 describe("ApiLogsService", () => {
   let service: ApiLogsService;
-  let apiLogRepository: { create: jest.Mock; save: jest.Mock; createQueryBuilder: jest.Mock };
+  let apiLogRepository: ApiLogRepositoryMock;
 
   beforeEach(async () => {
     apiLogRepository = {
-      create: jest.fn().mockImplementation((dto) => dto),
-      save: jest.fn().mockResolvedValue({}),
+      create: jest.fn<ApiLog, [Partial<ApiLog>]>((dto: Partial<ApiLog>) => dto as ApiLog),
+      save: jest.fn<Promise<ApiLog>, [ApiLog]>().mockResolvedValue({} as ApiLog),
       createQueryBuilder: jest.fn().mockReturnValue({
         delete: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
@@ -79,7 +85,7 @@ describe("ApiLogsService", () => {
         requestBody: { providerId: "u", password: "secret" },
       });
 
-      const createCall = apiLogRepository.create.mock.calls[0][0];
+      const createCall = apiLogRepository.create.mock.calls[0]?.[0];
       expect(createCall.requestBody).toEqual({ providerId: "u", password: "***" });
     });
   });

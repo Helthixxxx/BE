@@ -31,6 +31,7 @@ async function bootstrap() {
     .addTag("auth", "인증 API")
     .addTag("jobs", "Job 관리 API")
     .addTag("executions", "Execution 조회 API")
+    .addTag("admin", "어드민 대시보드 API")
     .addBearerAuth(
       {
         type: "http",

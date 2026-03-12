@@ -10,6 +10,7 @@ import { NotificationLogsModule } from "./notification-logs/notification-logs.mo
 import { SchedulerModule } from "./scheduler/scheduler.module";
 import { AuthModule } from "./auth/auth.module";
 import { DevicesModule } from "./devices/devices.module";
+import { AdminModule } from "./admin/admin.module";
 import databaseConfig from "./config/database.config";
 import httpConfig from "./config/http.config";
 import jwtConfig from "./config/jwt.config";
@@ -72,6 +73,7 @@ import { HealthController } from "./health.controller";
     HealthModule,
     NotificationLogsModule,
     DevicesModule,
+    AdminModule,
     // 스케줄러 모듈
     SchedulerModule,
   ],

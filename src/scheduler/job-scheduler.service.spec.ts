@@ -81,9 +81,7 @@ describe("JobSchedulerService", () => {
 
     it("실행 시간이 안 된 Job은 실행 안 함", async () => {
       const futureDate = new Date(Date.now() + 60000);
-      jobsService.findActiveJobs.mockResolvedValue([
-        { ...mockJob, nextRunAt: futureDate },
-      ]);
+      jobsService.findActiveJobs.mockResolvedValue([{ ...mockJob, nextRunAt: futureDate }]);
 
       await service.handleCron();
 

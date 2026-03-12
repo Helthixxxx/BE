@@ -1,6 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { DataSource } from "typeorm";
-import { ConfigService } from "@nestjs/config";
 import { HealthService } from "./health.service";
 import { JobsService } from "../jobs/jobs.service";
 import { ExecutionsService } from "../executions/executions.service";
@@ -8,13 +7,15 @@ import { NotificationLogsService } from "../notification-logs/notification-logs.
 import { NotificationsService } from "../notifications/notifications.service";
 import { Health } from "../common/types/health.enum";
 
-const createExecution = (overrides: Partial<{
-  id: number;
-  success: boolean;
-  durationMs: number | null;
-  finishedAt: Date | null;
-  createdAt: Date;
-}> = {}) => ({
+const createExecution = (
+  overrides: Partial<{
+    id: number;
+    success: boolean;
+    durationMs: number | null;
+    finishedAt: Date | null;
+    createdAt: Date;
+  }> = {},
+) => ({
   id: 1,
   jobId: "job-1",
   success: true,
@@ -60,7 +61,9 @@ describe("HealthService", () => {
         },
         {
           provide: NotificationsService,
-          useValue: { sendPushNotification: jest.fn().mockResolvedValue({ success: true, recipientCount: 1 }) },
+          useValue: {
+            sendPushNotification: jest.fn().mockResolvedValue({ success: true, recipientCount: 1 }),
+          },
         },
         {
           provide: "CONFIGURATION(health)",
@@ -72,10 +75,10 @@ describe("HealthService", () => {
         {
           provide: DataSource,
           useValue: {
-            transaction: jest.fn((fn) =>
+            transaction: jest.fn((fn: (manager: unknown) => Promise<unknown>) =>
               fn({
                 getRepository: jest.fn().mockReturnValue({
-                  create: jest.fn().mockImplementation((d) => d),
+                  create: jest.fn((d: Record<string, unknown>) => d),
                   save: jest.fn().mockResolvedValue({ id: "log-1" }),
                   update: jest.fn(),
                 }),

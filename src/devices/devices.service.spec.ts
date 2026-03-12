@@ -4,9 +4,11 @@ import { getRepositoryToken } from "@nestjs/typeorm";
 import { DataSource } from "typeorm";
 import { DevicesService } from "./devices.service";
 import { Device } from "./entities/device.entity";
+import { DeviceResponseDto } from "./dto/device-response.dto";
 
-const mockDevice = {
+const mockDevice: Device = {
   id: "device-1",
+  user: null,
   pushToken: "ExponentPushToken[xxx]",
   deviceId: "device-id-1",
   platform: "ios",
@@ -17,22 +19,35 @@ const mockDevice = {
   updatedAt: new Date(),
 };
 
+type DeviceRepoMock = {
+  findOne: jest.Mock<Promise<Device | null>, [unknown]>;
+  find: jest.Mock<Promise<Device[]>, [unknown?]>;
+  create: jest.Mock<Device, [Partial<Device>]>;
+  save: jest.Mock<Promise<Device>, [Device]>;
+  remove: jest.Mock<Promise<void>, [Device]>;
+};
+
 describe("DevicesService", () => {
   let service: DevicesService;
-  let deviceRepository: Record<string, jest.Mock>;
-  let dataSource: { transaction: jest.Mock };
+  let deviceRepository: DeviceRepoMock;
+  let dataSource: {
+    transaction: jest.Mock<
+      Promise<DeviceResponseDto>,
+      [(manager: unknown) => Promise<DeviceResponseDto>]
+    >;
+  };
 
   beforeEach(async () => {
     deviceRepository = {
-      findOne: jest.fn(),
-      find: jest.fn().mockResolvedValue([]),
-      create: jest.fn().mockImplementation((d) => d),
-      save: jest.fn().mockResolvedValue(mockDevice),
-      remove: jest.fn(),
+      findOne: jest.fn<Promise<Device | null>, [unknown]>(),
+      find: jest.fn<Promise<Device[]>, [unknown?]>().mockResolvedValue([]),
+      create: jest.fn<Device, [Partial<Device>]>((d: Partial<Device>) => d as Device),
+      save: jest.fn<Promise<Device>, [Device]>().mockResolvedValue(mockDevice),
+      remove: jest.fn<Promise<void>, [Device]>(),
     };
 
     dataSource = {
-      transaction: jest.fn((fn) =>
+      transaction: jest.fn((fn: (manager: unknown) => Promise<DeviceResponseDto>) =>
         fn({
           getRepository: () => deviceRepository,
         }),

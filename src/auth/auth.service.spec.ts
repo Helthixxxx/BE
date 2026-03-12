@@ -24,14 +24,21 @@ const mockUser: User = {
   updatedAt: new Date(),
 };
 
+type TransactionFn = (manager: EntityManager) => Promise<unknown>;
+
 describe("AuthService", () => {
   let service: AuthService;
-  let userRepository: { findOne: jest.Mock; save: jest.Mock; create: jest.Mock; remove: jest.Mock };
+  let userRepository: {
+    findOne: jest.Mock;
+    save: jest.Mock;
+    create: jest.Mock<User, [Partial<User>]>;
+    remove: jest.Mock;
+  };
   let jwtService: { sign: jest.Mock; verify: jest.Mock };
   let configService: { get: jest.Mock };
-  let dataSource: { transaction: jest.Mock };
+  let dataSource: { transaction: jest.Mock<Promise<unknown>, [TransactionFn]> };
 
-  const mockTransaction = (fn: (manager: EntityManager) => Promise<unknown>) => {
+  const mockTransaction = (fn: TransactionFn) => {
     const mockManager = {
       getRepository: jest.fn().mockReturnValue(userRepository),
     };
@@ -42,7 +49,7 @@ describe("AuthService", () => {
     userRepository = {
       findOne: jest.fn(),
       save: jest.fn(),
-      create: jest.fn().mockImplementation((dto) => ({ ...dto, id: "user-1" })),
+      create: jest.fn((dto: Partial<User>) => ({ ...dto, id: "user-1" }) as User),
       remove: jest.fn(),
     };
 
@@ -64,7 +71,7 @@ describe("AuthService", () => {
     };
 
     dataSource = {
-      transaction: jest.fn((fn) => mockTransaction(fn)),
+      transaction: jest.fn((fn: TransactionFn) => mockTransaction(fn)),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -105,9 +112,9 @@ describe("AuthService", () => {
     it("이미 존재하는 아이디로 회원가입 시 ConflictException", async () => {
       userRepository.findOne.mockResolvedValue(mockUser);
 
-      await expect(
-        service.signup({ providerId: "testuser", password: "pass" }),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.signup({ providerId: "testuser", password: "pass" })).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -129,18 +136,18 @@ describe("AuthService", () => {
     it("존재하지 않는 사용자 로그인 시 UnauthorizedException", async () => {
       userRepository.findOne.mockResolvedValue(null);
 
-      await expect(
-        service.login({ providerId: "unknown", password: "pass" }),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(service.login({ providerId: "unknown", password: "pass" })).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it("비밀번호 불일치 시 UnauthorizedException", async () => {
       userRepository.findOne.mockResolvedValue(mockUser);
       (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
-      await expect(
-        service.login({ providerId: "testuser", password: "wrong" }),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(service.login({ providerId: "testuser", password: "wrong" })).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 
@@ -152,7 +159,7 @@ describe("AuthService", () => {
       });
       userRepository.save.mockResolvedValue(mockUser);
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
-      jwtService.sign.mockImplementation((payload) =>
+      jwtService.sign.mockImplementation((payload: { role?: UserRole }) =>
         payload.role ? "new-access-token" : "new-refresh-token",
       );
 
@@ -168,9 +175,9 @@ describe("AuthService", () => {
         refreshTokenHash: null,
       });
 
-      await expect(
-        service.refresh({ refreshToken: "token" }),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(service.refresh({ refreshToken: "token" })).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it("유효하지 않은 refresh token이면 UnauthorizedException", async () => {
@@ -178,9 +185,9 @@ describe("AuthService", () => {
         throw new Error("invalid");
       });
 
-      await expect(
-        service.refresh({ refreshToken: "invalid" }),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(service.refresh({ refreshToken: "invalid" })).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 

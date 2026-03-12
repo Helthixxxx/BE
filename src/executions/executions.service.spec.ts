@@ -8,30 +8,62 @@ import { JobsService } from "../jobs/jobs.service";
 import { ExecutionErrorCode } from "../common/types/execution-error-type.enum";
 import { UserRole } from "../users/entities/user.entity";
 
-const mockExecution: Partial<Execution> = {
+const mockExecution: Execution = {
   id: 1,
   jobId: "job-1",
+  job: {} as Execution["job"],
   scheduledAt: new Date(),
   startedAt: new Date(),
   finishedAt: null,
   success: false,
   durationMs: null,
+  httpStatus: null,
   errorType: ExecutionErrorCode.NONE,
+  errorMessage: null,
+  responseSnippet: null,
   executionKey: "job-1:2025-01-01T00:00:00.000Z",
+  createdAt: new Date(),
+};
+
+const createExecutionFixture = (overrides: Partial<Execution> = {}): Execution => ({
+  ...mockExecution,
+  id: 1,
+  createdAt: new Date(),
+  scheduledAt: new Date(),
+  startedAt: new Date(),
+  finishedAt: new Date(),
+  durationMs: 100,
+  success: true,
+  ...overrides,
+});
+
+type ExecutionRepoMock = {
+  findOne: jest.Mock<Promise<Execution | null>, [unknown]>;
+  find: jest.Mock<Promise<Execution[]>, [unknown?]>;
+  create: jest.Mock<Execution, [Partial<Execution>]>;
+  save: jest.Mock<Promise<Execution>, [Execution]>;
+  createQueryBuilder: jest.Mock;
 };
 
 describe("ExecutionsService", () => {
   let service: ExecutionsService;
-  let executionRepository: Record<string, jest.Mock>;
+  let executionRepository: ExecutionRepoMock;
   let jobsService: { findOne: jest.Mock };
-  let dataSource: { transaction: jest.Mock };
+  let dataSource: {
+    transaction: jest.Mock<Promise<Execution>, [(manager: unknown) => Promise<Execution>]>;
+  };
 
   beforeEach(async () => {
     executionRepository = {
-      findOne: jest.fn(),
-      find: jest.fn().mockResolvedValue([]),
-      create: jest.fn().mockImplementation((dto) => ({ ...dto })),
-      save: jest.fn().mockResolvedValue({ ...mockExecution }),
+      findOne: jest.fn<Promise<Execution | null>, [unknown]>(),
+      find: jest.fn<Promise<Execution[]>, [unknown?]>().mockResolvedValue([]),
+      create: jest.fn<Execution, [Partial<Execution>]>(
+        (dto: Partial<Execution>) =>
+          ({
+            ...dto,
+          }) as Execution,
+      ),
+      save: jest.fn<Promise<Execution>, [Execution]>().mockResolvedValue({ ...mockExecution }),
       createQueryBuilder: jest.fn().mockReturnValue({
         where: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
@@ -47,7 +79,7 @@ describe("ExecutionsService", () => {
     };
 
     dataSource = {
-      transaction: jest.fn((fn) =>
+      transaction: jest.fn((fn: (manager: unknown) => Promise<Execution>) =>
         fn({
           getRepository: () => executionRepository,
         }),
@@ -92,7 +124,9 @@ describe("ExecutionsService", () => {
 
     it("duplicate key 에러 시 동일 메시지로 변환", async () => {
       executionRepository.findOne.mockResolvedValue(null);
-      executionRepository.save.mockRejectedValue(new Error("duplicate key value violates unique constraint"));
+      executionRepository.save.mockRejectedValue(
+        new Error("duplicate key value violates unique constraint"),
+      );
 
       const scheduledAt = new Date("2025-01-01T00:00:00.000Z");
 
@@ -108,7 +142,7 @@ describe("ExecutionsService", () => {
         ...mockExecution,
         startedAt: new Date("2025-01-01T00:00:00.000Z"),
       });
-      executionRepository.save.mockResolvedValue({});
+      executionRepository.save.mockResolvedValue(mockExecution);
 
       await service.updateResult(
         1,
@@ -142,7 +176,7 @@ describe("ExecutionsService", () => {
         limit: jest.fn().mockReturnThis(),
         getMany: jest.fn().mockResolvedValue([]),
       });
-      executionRepository.find = jest.fn().mockResolvedValue([]);
+      executionRepository.find = jest.fn<Promise<Execution[]>, [unknown?]>().mockResolvedValue([]);
 
       const result = await service.findByJobId("job-1", 20, undefined, "user-1", UserRole.USER);
 
@@ -152,14 +186,13 @@ describe("ExecutionsService", () => {
     });
 
     it("cursor와 함께 조회 시 andWhere 호출", async () => {
-      const execs = Array.from({ length: 2 }, (_, i) => ({
-        id: 10 - i,
-        jobId: "job-1",
-        createdAt: new Date(),
-        durationMs: 100,
-        finishedAt: new Date(),
-        success: true,
-      }));
+      const execs = Array.from({ length: 2 }, (_, i) =>
+        createExecutionFixture({
+          id: 10 - i,
+          jobId: "job-1",
+          createdAt: new Date(),
+        }),
+      );
       executionRepository.createQueryBuilder = jest.fn().mockReturnValue({
         where: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
@@ -168,15 +201,14 @@ describe("ExecutionsService", () => {
         limit: jest.fn().mockReturnThis(),
         getMany: jest.fn().mockResolvedValue(execs),
       });
-      executionRepository.find = jest.fn().mockResolvedValue(
-        Array.from({ length: 15 }, (_, i) => ({
-          id: 20 - i,
-          jobId: "job-1",
-          createdAt: new Date(),
-          durationMs: 100,
-          finishedAt: new Date(),
-          success: true,
-        })),
+      executionRepository.find = jest.fn<Promise<Execution[]>, [unknown?]>().mockResolvedValue(
+        Array.from({ length: 15 }, (_, i) =>
+          createExecutionFixture({
+            id: 20 - i,
+            jobId: "job-1",
+            createdAt: new Date(),
+          }),
+        ),
       );
 
       const cursor = Buffer.from(
