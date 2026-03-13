@@ -16,6 +16,7 @@ import httpConfig from "./config/http.config";
 import jwtConfig from "./config/jwt.config";
 import healthConfig from "./config/health.config";
 import apiLogConfig from "./config/api-log.config";
+import prometheusConfig from "./config/prometheus.config";
 import { HealthController } from "./health.controller";
 
 /**
@@ -27,7 +28,7 @@ import { HealthController } from "./health.controller";
     // ConfigModule: 환경변수 관리
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [databaseConfig, httpConfig, jwtConfig, healthConfig, apiLogConfig],
+      load: [databaseConfig, httpConfig, jwtConfig, healthConfig, apiLogConfig, prometheusConfig],
       envFilePath: [`.env.${process.env.NODE_ENV || "local"}`, ".env"],
       validationSchema: Joi.object({
         JWT_ACCESS_SECRET: Joi.string().required().messages({

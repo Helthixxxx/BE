@@ -11,6 +11,7 @@ import httpConfig from "../config/http.config";
 import { AdminService } from "./admin.service";
 import { AdminApiErrorsQueryDto } from "./dto/admin-api-errors-query.dto";
 import { AdminDashboardQueryDto } from "./dto/admin-dashboard-query.dto";
+import { PrometheusClient } from "./infra/prometheus.client";
 
 type AdminServiceInternals = {
   getDatabaseStatus: () => Promise<"connected" | "disconnected">;
@@ -138,6 +139,18 @@ describe("AdminService", () => {
           provide: DataSource,
           useValue: {
             query: jest.fn(),
+          },
+        },
+        {
+          provide: PrometheusClient,
+          useValue: {
+            getCpuUsagePercent: jest.fn(),
+            getMemoryUsage: jest.fn(),
+            getNetworkMbps: jest.fn(),
+            getNodes: jest.fn(),
+            getPods: jest.fn(),
+            getCpuTimeSeries: jest.fn(),
+            getMemoryTimeSeries: jest.fn(),
           },
         },
       ],

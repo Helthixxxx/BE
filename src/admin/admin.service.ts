@@ -12,8 +12,10 @@ import databaseConfig from "../config/database.config";
 import healthConfig from "../config/health.config";
 import httpConfig from "../config/http.config";
 import apiLogConfig from "../config/api-log.config";
-import { AdminDashboardQueryDto } from "./dto/admin-dashboard-query.dto";
 import { AdminApiErrorsQueryDto } from "./dto/admin-api-errors-query.dto";
+import { AdminDashboardQueryDto } from "./dto/admin-dashboard-query.dto";
+import { AdminSystemHealthQueryDto } from "./dto/admin-system-health-query.dto";
+import { PrometheusClient } from "./infra/prometheus.client";
 
 type MetricStatus = "healthy" | "warning" | "critical" | "unknown";
 type OverallStatus = "ok" | "degraded" | "failed";
@@ -89,6 +91,7 @@ export class AdminService {
     @Inject(apiLogConfig.KEY)
     private readonly apiLogConfiguration: ConfigType<typeof apiLogConfig>,
     private readonly dataSource: DataSource,
+    private readonly prometheusClient: PrometheusClient,
   ) {}
 
   async getCommon() {
@@ -218,6 +221,40 @@ export class AdminService {
       },
       limit,
       items,
+    };
+  }
+
+  async getSystemHealth(query: AdminSystemHealthQueryDto) {
+    const range = query.range ?? "24h";
+    const rangeHours = range === "1h" ? 1 : range === "24h" ? 24 : 168;
+    const stepMinutes = 5;
+    const end = new Date();
+    const start = new Date(end.getTime() - rangeHours * 60 * 60 * 1000);
+    const now = new Date();
+
+    const [summaryCpu, summaryMem, summaryNet, nodes, pods, cpuSeries, memSeries] =
+      await Promise.all([
+        this.prometheusClient.getCpuUsagePercent(now),
+        this.prometheusClient.getMemoryUsage(now),
+        this.prometheusClient.getNetworkMbps(now),
+        this.prometheusClient.getNodes(now),
+        this.prometheusClient.getPods(now),
+        this.prometheusClient.getCpuTimeSeries(start, end, stepMinutes),
+        this.prometheusClient.getMemoryTimeSeries(start, end, stepMinutes),
+      ]);
+
+    return {
+      summary: {
+        cpuUsagePercent: summaryCpu,
+        memoryUsage: summaryMem,
+        network: summaryNet,
+      },
+      timeSeries: {
+        cpu: cpuSeries,
+        memory: memSeries,
+      },
+      nodes,
+      pods,
     };
   }
 

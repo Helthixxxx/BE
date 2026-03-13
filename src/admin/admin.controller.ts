@@ -15,6 +15,8 @@ import {
   AdminDashboardOverviewResponseDto,
   AdminDashboardSettingsResponseDto,
 } from "./dto/admin-dashboard-response.dto";
+import { AdminSystemHealthQueryDto } from "./dto/admin-system-health-query.dto";
+import { AdminSystemHealthResponseDto } from "./dto/admin-system-health-response.dto";
 
 @ApiTags("admin")
 @Controller("admin/dashboard")
@@ -509,6 +511,81 @@ export class AdminController {
   })
   async getApiErrors(@Query() query: AdminApiErrorsQueryDto) {
     return await this.adminService.getApiErrors(query);
+  }
+
+  @Get("system-health")
+  @ApiOperation({
+    summary: "어드민 System Health 조회",
+    description:
+      "인프라 CPU/메모리/네트워크, 노드/파드(컨테이너) 현황 및 리소스 사용률 시계열을 조회합니다. Prometheus 연동 필요. (ADMIN 전용)",
+  })
+  @ApiQuery({ name: "range", required: false, enum: ["1h", "24h", "7d"], example: "24h" })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: "System Health 조회 성공",
+    type: AdminSystemHealthResponseDto,
+    example: {
+      meta: {
+        requestId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        timestamp: "2026-03-12T10:00:00.000Z",
+      },
+      data: {
+        summary: {
+          cpuUsagePercent: 42,
+          memoryUsage: { usedGb: 21.8, totalGb: 32, percent: 68 },
+          network: { inboundMbps: 125, outboundMbps: 89 },
+        },
+        timeSeries: {
+          cpu: [{ timestamp: "2026-03-12T05:00:00.000Z", value: 42 }],
+          memory: [{ timestamp: "2026-03-12T05:00:00.000Z", value: 68 }],
+        },
+        nodes: [
+          {
+            name: "node-helthix-01",
+            role: "master",
+            cpuPercent: 38,
+            memoryPercent: 62,
+            pods: 12,
+            status: "ready",
+          },
+          {
+            name: "node-helthix-02",
+            role: "worker",
+            cpuPercent: 55,
+            memoryPercent: 71,
+            pods: 18,
+            status: "ready",
+          },
+        ],
+        pods: [
+          {
+            name: "helthix",
+            namespace: "default",
+            ready: "1/1",
+            restarts: 0,
+            age: "3d",
+          },
+        ],
+      },
+    },
+  })
+  @ApiResponse({
+    status: HttpStatus.SERVICE_UNAVAILABLE,
+    description: "Prometheus 연결 실패",
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: "인증 실패",
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: "관리자 권한 없음",
+    type: ErrorResponseDto,
+  })
+  async getSystemHealth(@Query() query: AdminSystemHealthQueryDto) {
+    return await this.adminService.getSystemHealth(query);
   }
 
   @Get("settings")

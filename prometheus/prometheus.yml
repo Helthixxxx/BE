@@ -1,0 +1,40 @@
+# Prometheus configuration for Helthix
+# Deploy this on the Prometheus instance (172.31.33.130)
+# Scrapes node_exporter and cAdvisor on EC2-1 and EC2-2
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # EC2-1: node_exporter (host metrics)
+  - job_name: 'node-ec2-1'
+    static_configs:
+      - targets: ['172.31.38.175:9100']
+        labels:
+          instance: 'ec2-1'
+          node: 'node-helthix-01'
+
+  # EC2-2: node_exporter (host metrics)
+  - job_name: 'node-ec2-2'
+    static_configs:
+      - targets: ['172.31.44.135:9100']
+        labels:
+          instance: 'ec2-2'
+          node: 'node-helthix-02'
+
+  # EC2-1: cAdvisor (container metrics)
+  - job_name: 'cadvisor-ec2-1'
+    static_configs:
+      - targets: ['172.31.38.175:8080']
+        labels:
+          instance: 'ec2-1'
+          node: 'node-helthix-01'
+
+  # EC2-2: cAdvisor (container metrics)
+  - job_name: 'cadvisor-ec2-2'
+    static_configs:
+      - targets: ['172.31.44.135:8080']
+        labels:
+          instance: 'ec2-2'
+          node: 'node-helthix-02'
