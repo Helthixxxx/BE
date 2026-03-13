@@ -110,8 +110,8 @@ export class PrometheusClient {
     const totalBytes = totalResult.length > 0 ? parseFloat(totalResult[0].value[1]) : 0;
     const availableBytes = availableResult.length > 0 ? parseFloat(availableResult[0].value[1]) : 0;
     const usedBytes = Math.max(0, totalBytes - availableBytes);
-    const totalGb = totalBytes / (1024 ** 3);
-    const usedGb = usedBytes / (1024 ** 3);
+    const totalGb = totalBytes / 1024 ** 3;
+    const usedGb = usedBytes / 1024 ** 3;
     const percent = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0;
     return {
       usedGb: Math.round(usedGb * 100) / 100,
@@ -137,7 +137,11 @@ export class PrometheusClient {
   }
 
   /** CPU/메모리 시계열 (range) */
-  async getCpuTimeSeries(start: Date, end: Date, stepMinutes: number): Promise<Array<{ timestamp: string; value: number }>> {
+  async getCpuTimeSeries(
+    start: Date,
+    end: Date,
+    stepMinutes: number,
+  ): Promise<Array<{ timestamp: string; value: number }>> {
     const step = `${stepMinutes}m`;
     const query = `100 - (avg(irate(node_cpu_seconds_total{mode="idle"}[5m])) by () * 100)`;
     const result = await this.queryRange(query, start, end, step);
@@ -154,7 +158,11 @@ export class PrometheusClient {
     return points;
   }
 
-  async getMemoryTimeSeries(start: Date, end: Date, stepMinutes: number): Promise<Array<{ timestamp: string; value: number }>> {
+  async getMemoryTimeSeries(
+    start: Date,
+    end: Date,
+    stepMinutes: number,
+  ): Promise<Array<{ timestamp: string; value: number }>> {
     const step = `${stepMinutes}m`;
     const query = `100 * (1 - sum(node_memory_MemAvailable_bytes) / sum(node_memory_MemTotal_bytes))`;
     const result = await this.queryRange(query, start, end, step);
@@ -183,8 +191,8 @@ export class PrometheusClient {
     }>
   > {
     const instanceToNode: Record<string, string> = {
-      "172.31.38.175:9100": "node-helthix-01",
-      "172.31.44.135:9100": "node-helthix-02",
+      "ec2-1": "node-helthix-01",
+      "ec2-2": "node-helthix-02",
     };
     const nodeRoles: Record<string, string> = {
       "node-helthix-01": "master",
@@ -220,8 +228,8 @@ export class PrometheusClient {
     const containerCountQuery = `count(container_last_seen{name!="",name!="/"}) by (instance)`;
     const containerResult = await this.query(containerCountQuery, time).catch(() => []);
     const cadvisorToNode: Record<string, string> = {
-      "172.31.38.175:8080": "node-helthix-01",
-      "172.31.44.135:8080": "node-helthix-02",
+      "ec2-1": "node-helthix-01",
+      "ec2-2": "node-helthix-02",
     };
     const podsByNode = new Map<string, number>();
     for (const r of containerResult) {
@@ -285,19 +293,33 @@ export class PrometheusClient {
     }
 
     const now = (time || new Date()).getTime() / 1000;
-    const pods: Array<{ name: string; namespace: string; ready: string; restarts: number; age: string }> = [];
+    const pods: Array<{
+      name: string;
+      namespace: string;
+      ready: string;
+      restarts: number;
+      age: string;
+    }> = [];
 
     const seen = new Set<string>();
     for (const r of startResult) {
       const name = (r.metric.name || "").replace(/^\//, "");
-      if (!name || name === "POD" || /^k8s_/.test(name) || /^(prometheus|node-exporter|cadvisor)/.test(name)) continue;
+      if (
+        !name ||
+        name === "POD" ||
+        /^k8s_/.test(name) ||
+        /^(prometheus|node-exporter|cadvisor)/.test(name)
+      )
+        continue;
       if (seen.has(name)) continue;
       seen.add(name);
 
       const startSec = parseFloat(r.value[1]);
       const ageSec = now - startSec;
       const ageStr = formatAge(ageSec);
-      const lastSeen = lastSeenResult.find((x) => (x.metric.name || "").replace(/^\//, "") === name);
+      const lastSeen = lastSeenResult.find(
+        (x) => (x.metric.name || "").replace(/^\//, "") === name,
+      );
       const isReady = lastSeen && now - parseFloat(lastSeen.value[1]) < 120;
       const restarts = restartByKey.get(r.metric.name || "") ?? 0;
 
