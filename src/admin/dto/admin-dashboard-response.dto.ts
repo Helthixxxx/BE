@@ -3,12 +3,9 @@ import { MetaDto } from "../../common/types/response-docs.types";
 import {
   AdminActiveJobHealthSummaryDto,
   AdminApiErrorDetailDto,
-  AdminDashboardDefaultsDto,
   AdminDashboardWindowDto,
   AdminMetricSummaryDto,
-  AdminNotificationChannelsDto,
   AdminRecentApiErrorDto,
-  AdminRuntimeConfigDto,
   AdminServicePlatformInfoDto,
 } from "./admin-dashboard-common.dto";
 
@@ -181,38 +178,4 @@ export class AdminDashboardApiErrorsResponseDto {
 
   @ApiProperty({ type: AdminDashboardApiErrorsDataDto })
   data: AdminDashboardApiErrorsDataDto;
-}
-
-export class AdminDashboardSettingsDataDto {
-  @ApiProperty({ type: AdminDashboardDefaultsDto })
-  dashboardDefaults: AdminDashboardDefaultsDto;
-
-  @ApiProperty({ type: AdminRuntimeConfigDto })
-  runtimeConfig: AdminRuntimeConfigDto;
-
-  @ApiProperty({ type: AdminNotificationChannelsDto })
-  notificationChannels: AdminNotificationChannelsDto;
-
-  @ApiProperty({
-    type: [String],
-    example: [
-      "infraCpuWarningThreshold",
-      "apiErrorRateWarningThreshold",
-      "dbConnectionWarningThreshold",
-      "replicationLagWarningThreshold",
-      "realtimeRefreshEnabled",
-      "autoEscalationEnabled",
-      "anomalyDetectionEnabled",
-      "maintenanceMuteEnabled",
-    ],
-  })
-  unsupportedSettings: string[];
-}
-
-export class AdminDashboardSettingsResponseDto {
-  @ApiProperty({ type: MetaDto })
-  meta: MetaDto;
-
-  @ApiProperty({ type: AdminDashboardSettingsDataDto })
-  data: AdminDashboardSettingsDataDto;
 }

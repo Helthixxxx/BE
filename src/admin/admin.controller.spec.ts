@@ -11,7 +11,6 @@ describe("AdminController", () => {
     getOverview: jest.Mock;
     getAppMetrics: jest.Mock;
     getApiErrors: jest.Mock;
-    getSettings: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -20,7 +19,6 @@ describe("AdminController", () => {
       getOverview: jest.fn().mockResolvedValue({ totalRequests: 10 }),
       getAppMetrics: jest.fn().mockResolvedValue({ timeSeries: [] }),
       getApiErrors: jest.fn().mockResolvedValue({ items: [] }),
-      getSettings: jest.fn().mockReturnValue({ dashboardDefaults: { defaultRangeHours: 24 } }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -63,12 +61,5 @@ describe("AdminController", () => {
 
     expect(adminService.getApiErrors).toHaveBeenCalledWith(query);
     expect(result).toEqual({ items: [] });
-  });
-
-  it("settings 조회 시 service.getSettings 호출", () => {
-    const result = controller.getSettings();
-
-    expect(adminService.getSettings).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ dashboardDefaults: { defaultRangeHours: 24 } });
   });
 });

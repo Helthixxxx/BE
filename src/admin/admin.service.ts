@@ -62,17 +62,6 @@ type ApiErrorDetailRow = {
   occurred_at: string;
 };
 
-const DEFAULT_REFRESH_INTERVAL_SECONDS = 60;
-const DEFAULT_PRESET = "operations-overview";
-
-type DatabaseExtraConfig = {
-  max?: number;
-  min?: number;
-  connectionTimeoutMillis?: number;
-  idleTimeoutMillis?: number;
-  acquireTimeoutMillis?: number;
-};
-
 @Injectable()
 export class AdminService {
   constructor(
@@ -255,54 +244,6 @@ export class AdminService {
       },
       nodes,
       pods,
-    };
-  }
-
-  getSettings() {
-    const dbExtra = this.getDatabaseExtraConfig();
-
-    return {
-      dashboardDefaults: {
-        defaultRangeHours: 24,
-        realtimeRefreshIntervalSeconds: DEFAULT_REFRESH_INTERVAL_SECONDS,
-        operatorViewPreset: DEFAULT_PRESET,
-        defaultBucketMinutes: 60,
-      },
-      runtimeConfig: {
-        environment: process.env.NODE_ENV || "local",
-        httpTimeoutMs: this.httpConfiguration.timeout,
-        httpMaxRedirects: this.httpConfiguration.maxRedirects,
-        healthDegradedThresholdMs: this.healthConfiguration.degradedThresholdMs,
-        healthGracePeriodMs: this.healthConfiguration.gracePeriodMs,
-        apiLogRetentionDays: this.apiLogConfiguration.retentionDays,
-        apiLogBodyMaxBytes: this.apiLogConfiguration.bodyMaxBytes,
-        apiLogExcludedPaths: this.apiLogConfiguration.excludedPaths,
-        dbPool: {
-          maxConnections: dbExtra.max ?? null,
-          minConnections: dbExtra.min ?? null,
-          connectionTimeoutMs: dbExtra.connectionTimeoutMillis ?? null,
-          idleTimeoutMs: dbExtra.idleTimeoutMillis ?? null,
-          acquireTimeoutMs: dbExtra.acquireTimeoutMillis ?? null,
-          queryTimeoutMs: this.databaseConfiguration.connectTimeoutMS ?? null,
-        },
-      },
-      notificationChannels: {
-        push: true,
-        slack: false,
-        pagerDuty: false,
-        emailSummary: false,
-        sms: false,
-      },
-      unsupportedSettings: [
-        "infraCpuWarningThreshold",
-        "apiErrorRateWarningThreshold",
-        "dbConnectionWarningThreshold",
-        "replicationLagWarningThreshold",
-        "realtimeRefreshEnabled",
-        "autoEscalationEnabled",
-        "anomalyDetectionEnabled",
-        "maintenanceMuteEnabled",
-      ],
     };
   }
 
@@ -737,15 +678,6 @@ export class AdminService {
       deployment: "docker",
       cloudProvider: process.env.CLOUD_PROVIDER || "aws",
     };
-  }
-
-  private getDatabaseExtraConfig(): DatabaseExtraConfig {
-    const extra: unknown = (this.databaseConfiguration as { extra?: unknown }).extra;
-    if (!extra || typeof extra !== "object") {
-      return {};
-    }
-
-    return extra as DatabaseExtraConfig;
   }
 
   private alignTimestamp(timestampMs: number, bucketMinutes: number): string {

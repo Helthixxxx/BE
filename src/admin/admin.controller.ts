@@ -13,7 +13,6 @@ import {
   AdminDashboardAppMetricsResponseDto,
   AdminDashboardCommonResponseDto,
   AdminDashboardOverviewResponseDto,
-  AdminDashboardSettingsResponseDto,
 } from "./dto/admin-dashboard-response.dto";
 import { AdminSystemHealthQueryDto } from "./dto/admin-system-health-query.dto";
 import { AdminSystemHealthResponseDto } from "./dto/admin-system-health-response.dto";
@@ -586,98 +585,5 @@ export class AdminController {
   })
   async getSystemHealth(@Query() query: AdminSystemHealthQueryDto) {
     return await this.adminService.getSystemHealth(query);
-  }
-
-  @Get("settings")
-  @ApiOperation({
-    summary: "어드민 Settings 조회",
-    description: "현재 코드베이스에서 실제 노출 가능한 시스템 설정값을 조회합니다. (ADMIN 전용)",
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: "Settings 조회 성공",
-    type: AdminDashboardSettingsResponseDto,
-    example: {
-      meta: {
-        requestId: "dc796f1f-848c-4d23-8e86-46970d7d8d53",
-        timestamp: "2026-03-09T08:00:00.000Z",
-      },
-      data: {
-        dashboardDefaults: {
-          defaultRangeHours: 24,
-          realtimeRefreshIntervalSeconds: 60,
-          operatorViewPreset: "operations-overview",
-          defaultBucketMinutes: 60,
-        },
-        runtimeConfig: {
-          environment: "production",
-          httpTimeoutMs: 30000,
-          httpMaxRedirects: 5,
-          healthDegradedThresholdMs: 800,
-          healthGracePeriodMs: 120000,
-          apiLogRetentionDays: 30,
-          apiLogBodyMaxBytes: 10240,
-          apiLogExcludedPaths: ["/health", "/api-docs", "/api-docs/*", "/favicon.ico"],
-          dbPool: {
-            maxConnections: 20,
-            minConnections: 5,
-            connectionTimeoutMs: 10000,
-            idleTimeoutMs: 30000,
-            acquireTimeoutMs: 10000,
-            queryTimeoutMs: 30000,
-          },
-        },
-        notificationChannels: {
-          push: true,
-          slack: false,
-          pagerDuty: false,
-          emailSummary: false,
-          sms: false,
-        },
-        unsupportedSettings: [
-          "infraCpuWarningThreshold",
-          "apiErrorRateWarningThreshold",
-          "dbConnectionWarningThreshold",
-          "replicationLagWarningThreshold",
-          "realtimeRefreshEnabled",
-          "autoEscalationEnabled",
-          "anomalyDetectionEnabled",
-          "maintenanceMuteEnabled",
-        ],
-      },
-    },
-  })
-  @ApiResponse({
-    status: HttpStatus.UNAUTHORIZED,
-    description: "인증 실패",
-    type: ErrorResponseDto,
-    example: {
-      meta: {
-        requestId: "dc796f1f-848c-4d23-8e86-46970d7d8d53",
-        timestamp: "2026-03-09T08:00:00.000Z",
-      },
-      error: {
-        code: "UNAUTHORIZED",
-        message: "Unauthorized",
-      },
-    },
-  })
-  @ApiResponse({
-    status: HttpStatus.FORBIDDEN,
-    description: "관리자 권한 없음",
-    type: ErrorResponseDto,
-    example: {
-      meta: {
-        requestId: "dc796f1f-848c-4d23-8e86-46970d7d8d53",
-        timestamp: "2026-03-09T08:00:00.000Z",
-      },
-      error: {
-        code: "FORBIDDEN",
-        message: "권한이 없습니다.",
-      },
-    },
-  })
-  getSettings() {
-    return this.adminService.getSettings();
   }
 }

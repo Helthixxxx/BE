@@ -298,13 +298,4 @@ describe("AdminService", () => {
     });
     expect(result.items[0]?.responseBody).toEqual({ error: { code: "UNAUTHORIZED" } });
   });
-
-  it("getSettings는 런타임 설정과 dbPool 값을 반환", () => {
-    const result = service.getSettings();
-
-    expect(result.dashboardDefaults.defaultRangeHours).toBe(24);
-    expect(result.runtimeConfig.httpTimeoutMs).toBe(30000);
-    expect(result.runtimeConfig.dbPool.maxConnections).toBe(20);
-    expect(result.notificationChannels.push).toBe(true);
-  });
 });

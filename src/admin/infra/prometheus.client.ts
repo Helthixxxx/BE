@@ -304,13 +304,8 @@ export class PrometheusClient {
     const seen = new Set<string>();
     for (const r of startResult) {
       const name = (r.metric.name || "").replace(/^\//, "");
-      if (
-        !name ||
-        name === "POD" ||
-        /^k8s_/.test(name) ||
-        /^(prometheus|node-exporter|cadvisor)/.test(name)
-      )
-        continue;
+      // POD, k8s_* 만 제외 (node-exporter, cadvisor 등 인프라 컨테이너 포함 → nodes[].pods 개수와 일치)
+      if (!name || name === "POD" || /^k8s_/.test(name)) continue;
       if (seen.has(name)) continue;
       seen.add(name);
 
