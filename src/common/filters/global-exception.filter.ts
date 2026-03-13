@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import {
   ExceptionFilter,
   Catch,
@@ -120,7 +121,17 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
-    const requestId = request.requestId as string;
+
+    // RequestIdMiddleware가 실행되지 않은 경우(예: 파싱 오류) fallback으로 requestId 보장
+    const rawRequestId = (request.requestId as string | undefined)?.trim();
+    const requestId = rawRequestId || randomUUID();
+    if (!rawRequestId) {
+      request.requestId = requestId;
+    }
+    const reqWithStartAt = request as RequestWithStartAt;
+    if (reqWithStartAt.startAt == null) {
+      reqWithStartAt.startAt = Date.now();
+    }
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let errorCode: ErrorCode = ErrorCode.INTERNAL_SERVER_ERROR;

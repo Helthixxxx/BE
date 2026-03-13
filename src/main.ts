@@ -1,3 +1,5 @@
+import { randomUUID } from "crypto";
+import { Request, Response, NextFunction } from "express";
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
@@ -6,6 +8,14 @@ import { buildCorsOptions } from "./common/middleware/cors.middleware";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // requestId를 최상단에서 모든 요청에 적용 (500 에러 시 api_logs 저장 보장)
+  app.use((req: Request, _res: Response, next: NextFunction) => {
+    req.requestId = req.requestId || randomUUID();
+    const reqExt = req as Request & { startAt?: number };
+    reqExt.startAt = reqExt.startAt ?? Date.now();
+    next();
+  });
 
   // CORS 설정
   app.enableCors(buildCorsOptions());
