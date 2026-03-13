@@ -134,6 +134,21 @@ runs:
           exit 1
         }
 
+    - name: Copy docker-compose to EC2
+      shell: bash
+      env:
+        EC2_HOST: ${{ steps.resolve-host.outputs.host }}
+      run: |
+        set -euo pipefail
+        : "${EC2_HOST:?EC2_HOST is not set}"
+        echo "[Sync] Copying docker-compose.yml to EC2..."
+        scp -i ~/.ssh/deploy_key \
+          -o StrictHostKeyChecking=no \
+          -o UserKnownHostsFile=/dev/null \
+          "$GITHUB_WORKSPACE/docker-compose.yml" \
+          ubuntu@"${EC2_HOST}":~/BE/docker-compose.yml
+        echo "[Sync] docker-compose.yml copied (includes app, node_exporter, cadvisor)"
+
     - name: Drain instance from Target Group
       shell: bash
       run: |
