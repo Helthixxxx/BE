@@ -40,11 +40,20 @@ export class ApiLogsService {
   /** 로그 제외 경로 여부 */
   isExcludedPath(path: string): boolean {
     const normalized = path.toLowerCase();
+
+    if (normalized.endsWith(".php")) {
+      return true;
+    }
+
     return this.excludedPaths.some((excluded) => {
       const e = excluded.toLowerCase().trim();
       if (e.endsWith("/*")) {
         const prefix = e.slice(0, -2);
         return normalized === prefix || normalized.startsWith(prefix + "/");
+      }
+      if (e.startsWith("*")) {
+        const suffix = e.slice(1);
+        return suffix.length > 0 && normalized.endsWith(suffix);
       }
       return normalized === e || normalized.startsWith(e + "/");
     });

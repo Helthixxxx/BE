@@ -57,6 +57,12 @@ describe("ApiLogsService", () => {
     it("/jobs는 제외 아님", () => {
       expect(service.isExcludedPath("/jobs")).toBe(false);
     });
+
+    it("*.php 경로는 항상 제외 (매크로봇 스캔 대상)", () => {
+      expect(service.isExcludedPath("/config.php")).toBe(true);
+      expect(service.isExcludedPath("/index.php")).toBe(true);
+      expect(service.isExcludedPath("/wp-admin/install.php")).toBe(true);
+    });
   });
 
   describe("saveLog", () => {
