@@ -265,6 +265,13 @@ export class AdminService {
         this.getSlowQueries(10),
       ]);
 
+    // Prometheus postgres_exporter 미연동 시 pg_stat_database 직접 샘플링으로 fallback
+    const [finalReadQps, finalWriteQps, finalQpsTrend] = await this.resolveDatabaseQps(
+      readQps,
+      writeQps,
+      qpsTrend,
+    );
+
     // Prometheus postgres_exporter 미연동 시(max=0) pg_stat_activity 직접 조회로 fallback
     const connStats =
       promConnStats && promConnStats.max > 0
@@ -280,15 +287,123 @@ export class AdminService {
     return {
       summary: {
         connectionPool,
-        readQps: readQps ?? null,
-        writeQps: writeQps ?? null,
+        readQps: finalReadQps,
+        writeQps: finalWriteQps,
         replicaLagMs: null,
       },
       connectionPoolStatus: connectionPool,
       slowQueries: slowQueriesResult.queries,
       slowQueriesInfoMessage: slowQueriesResult.infoMessage ?? null,
-      qpsTrend,
+      qpsTrend: finalQpsTrend,
     };
+  }
+
+  /**
+   * Prometheus에서 QPS를 가져오지 못하면 pg_stat_database 2회 샘플링으로 fallback
+   */
+  private async resolveDatabaseQps(
+    readQps: number | null,
+    writeQps: number | null,
+    qpsTrend: {
+      read: Array<{ timestamp: string; value: number }>;
+      write: Array<{ timestamp: string; value: number }>;
+    },
+  ): Promise<
+    [
+      number | null,
+      number | null,
+      {
+        read: Array<{ timestamp: string; value: number }>;
+        write: Array<{ timestamp: string; value: number }>;
+      },
+    ]
+  > {
+    const needsFallback =
+      qpsTrend.read.length === 0 ||
+      qpsTrend.write.length === 0 ||
+      (readQps == null && writeQps == null);
+
+    if (!needsFallback) {
+      return [readQps, writeQps, qpsTrend];
+    }
+
+    const sampled = await this.getDatabaseQpsFromPgSampling();
+    if (!sampled) {
+      return [readQps, writeQps, qpsTrend];
+    }
+
+    const now = new Date();
+    const nowStr = now.toISOString();
+    const pastStr = new Date(now.getTime() - 5 * 60 * 1000).toISOString();
+    const fallbackPoint = (val: number) => [
+      { timestamp: pastStr, value: val },
+      { timestamp: nowStr, value: val },
+    ];
+
+    return [
+      readQps ?? sampled.readQps,
+      writeQps ?? sampled.writeQps,
+      {
+        read: qpsTrend.read.length > 0 ? qpsTrend.read : fallbackPoint(sampled.readQps),
+        write: qpsTrend.write.length > 0 ? qpsTrend.write : fallbackPoint(sampled.writeQps),
+      },
+    ];
+  }
+
+  /**
+   * pg_stat_database 2회 샘플링(약 1초 간격)으로 read/write QPS 추정
+   */
+  private async getDatabaseQpsFromPgSampling(): Promise<{
+    readQps: number;
+    writeQps: number;
+  } | null> {
+    try {
+      const sample = async () => {
+        const rows = await this.dataSource.query<
+          Array<{
+            tup_returned: string;
+            tup_fetched: string;
+            tup_inserted: string;
+            tup_updated: string;
+            tup_deleted: string;
+          }>
+        >(
+          `SELECT
+            coalesce(tup_returned, 0)::text AS tup_returned,
+            coalesce(tup_fetched, 0)::text AS tup_fetched,
+            coalesce(tup_inserted, 0)::text AS tup_inserted,
+            coalesce(tup_updated, 0)::text AS tup_updated,
+            coalesce(tup_deleted, 0)::text AS tup_deleted
+          FROM pg_stat_database
+          WHERE datname = current_database()`,
+        );
+        if (!rows[0]) return null;
+        const r = rows[0];
+        return {
+          read: BigInt(r.tup_returned) + BigInt(r.tup_fetched),
+          write: BigInt(r.tup_inserted) + BigInt(r.tup_updated) + BigInt(r.tup_deleted),
+        };
+      };
+
+      const s1 = await sample();
+      if (!s1) return null;
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      const s2 = await sample();
+      if (!s2) return null;
+
+      const elapsedSec = 1;
+      const readDelta = Number(s2.read - s1.read);
+      const writeDelta = Number(s2.write - s1.write);
+
+      return {
+        readQps: Math.round(Math.max(0, readDelta / elapsedSec) * 100) / 100,
+        writeQps: Math.round(Math.max(0, writeDelta / elapsedSec) * 100) / 100,
+      };
+    } catch {
+      return null;
+    }
   }
 
   private async getDatabaseConnectionFromPg(): Promise<{
