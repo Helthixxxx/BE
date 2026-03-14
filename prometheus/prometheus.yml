@@ -38,3 +38,10 @@ scrape_configs:
         labels:
           instance: 'ec2-2'
           node: 'node-helthix-02'
+
+  # postgres_exporter (Database Health - EC2에 app 배포 시 함께 실행)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['172.31.38.175:9187', '172.31.44.135:9187']
+        labels:
+          instance: 'helthix-rds'

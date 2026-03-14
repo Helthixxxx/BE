@@ -19,3 +19,10 @@ scrape_configs:
         labels:
           instance: 'local'
           node: 'node-local'
+
+  - job_name: 'postgres-local'
+    static_configs:
+      - targets: ['postgres_exporter:9187']
+        labels:
+          instance: 'local'
+          datname: 'helthix'

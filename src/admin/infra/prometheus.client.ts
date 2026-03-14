@@ -329,6 +329,133 @@ export class PrometheusClient {
 
     return pods.slice(0, 50);
   }
+
+  /** Database Health: 커넥션 현황 (postgres_exporter) */
+  async getDatabaseConnectionStats(
+    time?: Date,
+  ): Promise<{ active: number; idle: number; max: number } | null> {
+    const db = "helthix";
+    try {
+      const activeQuery = `sum(pg_stat_activity_count{datname="${db}",state="active"}) or vector(0)`;
+      const idleQuery = `sum(pg_stat_activity_count{datname="${db}",state="idle"}) or vector(0)`;
+      const maxQuery = `pg_settings_max_connections{datname="${db}"}`;
+
+      const [activeRes, idleRes, maxRes] = await Promise.all([
+        this.query(activeQuery, time).catch(() => []),
+        this.query(idleQuery, time).catch(() => []),
+        this.query(maxQuery, time).catch(() => []),
+      ]);
+
+      const active = activeRes.length > 0 ? Math.round(parseFloat(activeRes[0].value[1])) : 0;
+      const idle = idleRes.length > 0 ? Math.round(parseFloat(idleRes[0].value[1])) : 0;
+      const max = maxRes.length > 0 ? Math.round(parseFloat(maxRes[0].value[1])) : 0;
+
+      return { active, idle, max };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Database Health: Read QPS (초당 읽기 처리량, tup_returned + tup_fetched) */
+  async getDatabaseReadQps(time?: Date): Promise<number | null> {
+    const db = "helthix";
+    const queries = [
+      `sum(rate(pg_stat_database_tup_returned{datname="${db}"}[1m])) + sum(rate(pg_stat_database_tup_fetched{datname="${db}"}[1m]))`,
+      `sum(rate(pg_stat_database_tup_returned[1m])) + sum(rate(pg_stat_database_tup_fetched[1m]))`,
+    ];
+    for (const query of queries) {
+      try {
+        const result = await this.query(query, time);
+        if (result.length > 0) {
+          return Math.round(parseFloat(result[0].value[1]) * 100) / 100;
+        }
+      } catch {
+        // 다음 쿼리 시도
+      }
+    }
+    return null;
+  }
+
+  /** Database Health: Write QPS (초당 쓰기 처리량, insert+update+delete) */
+  async getDatabaseWriteQps(time?: Date): Promise<number | null> {
+    const db = "helthix";
+    const queries = [
+      `sum(rate(pg_stat_database_tup_inserted{datname="${db}"}[1m])) + sum(rate(pg_stat_database_tup_updated{datname="${db}"}[1m])) + sum(rate(pg_stat_database_tup_deleted{datname="${db}"}[1m]))`,
+      `sum(rate(pg_stat_database_tup_inserted[1m])) + sum(rate(pg_stat_database_tup_updated[1m])) + sum(rate(pg_stat_database_tup_deleted[1m]))`,
+    ];
+    for (const query of queries) {
+      try {
+        const result = await this.query(query, time);
+        if (result.length > 0) {
+          return Math.round(parseFloat(result[0].value[1]) * 100) / 100;
+        }
+      } catch {
+        // 다음 쿼리 시도
+      }
+    }
+    return null;
+  }
+
+  /** Database Health: QPS 시계열 */
+  async getDatabaseQpsTimeSeries(
+    start: Date,
+    end: Date,
+    stepMinutes: number,
+  ): Promise<{
+    read: Array<{ timestamp: string; value: number }>;
+    write: Array<{ timestamp: string; value: number }>;
+  }> {
+    const db = "helthix";
+    const step = `${stepMinutes}m`;
+    const rateWindow = "1m";
+    const readQueries = [
+      `sum(rate(pg_stat_database_tup_returned{datname="${db}"}[${rateWindow}])) + sum(rate(pg_stat_database_tup_fetched{datname="${db}"}[${rateWindow}]))`,
+      `sum(rate(pg_stat_database_tup_returned[${rateWindow}])) + sum(rate(pg_stat_database_tup_fetched[${rateWindow}]))`,
+    ];
+    const writeQueries = [
+      `sum(rate(pg_stat_database_tup_inserted{datname="${db}"}[${rateWindow}])) + sum(rate(pg_stat_database_tup_updated{datname="${db}"}[${rateWindow}])) + sum(rate(pg_stat_database_tup_deleted{datname="${db}"}[${rateWindow}]))`,
+      `sum(rate(pg_stat_database_tup_inserted[${rateWindow}])) + sum(rate(pg_stat_database_tup_updated[${rateWindow}])) + sum(rate(pg_stat_database_tup_deleted[${rateWindow}]))`,
+    ];
+
+    const toPoints = (
+      result: PrometheusMatrixResult,
+    ): Array<{ timestamp: string; value: number }> => {
+      const points: Array<{ timestamp: string; value: number }> = [];
+      for (const series of result) {
+        for (const [ts, val] of series.values) {
+          points.push({
+            timestamp: new Date(ts * 1000).toISOString(),
+            value: Math.round(parseFloat(val) * 100) / 100,
+          });
+        }
+      }
+      points.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      return points;
+    };
+
+    let readResult: PrometheusMatrixResult = [];
+    let writeResult: PrometheusMatrixResult = [];
+    for (const q of readQueries) {
+      try {
+        readResult = await this.queryRange(q, start, end, step);
+        break;
+      } catch {
+        // 다음 쿼리 시도
+      }
+    }
+    for (const q of writeQueries) {
+      try {
+        writeResult = await this.queryRange(q, start, end, step);
+        break;
+      } catch {
+        // 다음 쿼리 시도
+      }
+    }
+    return {
+      read: toPoints(readResult),
+      write: toPoints(writeResult),
+    };
+  }
 }
 
 function formatAge(seconds: number): string {

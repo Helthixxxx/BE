@@ -247,6 +247,112 @@ export class AdminService {
     };
   }
 
+  async getDatabaseHealth(query: AdminSystemHealthQueryDto) {
+    const range = query.range ?? "24h";
+    const rangeHours = range === "1h" ? 1 : range === "24h" ? 24 : 168;
+    const stepMinutes = rangeHours <= 1 ? 1 : rangeHours <= 24 ? 5 : 30;
+    const end = new Date();
+    const start = new Date(end.getTime() - rangeHours * 60 * 60 * 1000);
+    const now = new Date();
+
+    const [promConnStats, readQps, writeQps, qpsTrend, pgConnStats, slowQueriesResult] =
+      await Promise.all([
+        this.prometheusClient.getDatabaseConnectionStats(now),
+        this.prometheusClient.getDatabaseReadQps(now),
+        this.prometheusClient.getDatabaseWriteQps(now),
+        this.prometheusClient.getDatabaseQpsTimeSeries(start, end, stepMinutes),
+        this.getDatabaseConnectionFromPg(),
+        this.getSlowQueries(10),
+      ]);
+
+    // Prometheus postgres_exporter 미연동 시(max=0) pg_stat_activity 직접 조회로 fallback
+    const connStats =
+      promConnStats && promConnStats.max > 0
+        ? promConnStats
+        : (pgConnStats ?? { active: 0, idle: 0, max: 100 });
+    const connectionPool = {
+      active: connStats.active,
+      max: connStats.max,
+      idle: connStats.idle,
+      waiting: 0,
+    };
+
+    return {
+      summary: {
+        connectionPool,
+        readQps: readQps ?? null,
+        writeQps: writeQps ?? null,
+        replicaLagMs: null,
+      },
+      connectionPoolStatus: connectionPool,
+      slowQueries: slowQueriesResult.queries,
+      slowQueriesInfoMessage: slowQueriesResult.infoMessage ?? null,
+      qpsTrend,
+    };
+  }
+
+  private async getDatabaseConnectionFromPg(): Promise<{
+    active: number;
+    idle: number;
+    max: number;
+  } | null> {
+    try {
+      const rows = await this.dataSource.query<
+        Array<{ active: string; idle: string; total: string }>
+      >(
+        `SELECT
+          count(*) FILTER (WHERE state = 'active')::text AS active,
+          count(*) FILTER (WHERE state = 'idle')::text AS idle,
+          count(*)::text AS total
+        FROM pg_stat_activity
+        WHERE datname = current_database()`,
+      );
+      const maxRows =
+        await this.dataSource.query<Array<{ max_connections: string }>>(`SHOW max_connections`);
+      const active = rows[0] ? parseInt(rows[0].active, 10) || 0 : 0;
+      const idle = rows[0] ? parseInt(rows[0].idle, 10) || 0 : 0;
+      const max = maxRows[0] ? parseInt(maxRows[0].max_connections, 10) || 100 : 100;
+      return { active, idle, max };
+    } catch {
+      return null;
+    }
+  }
+
+  private async getSlowQueries(limit: number): Promise<{
+    queries: Array<{ query: string; meanExecTimeMs: number; calls: number }> | null;
+    infoMessage: string | null;
+  }> {
+    try {
+      const rows = await this.dataSource.query<
+        Array<{ query: string; mean_exec_time: string; calls: string }>
+      >(
+        `SELECT
+          left(query, 500) AS query,
+          round(mean_exec_time)::text AS mean_exec_time,
+          calls::text AS calls
+        FROM pg_stat_statements
+        WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database())
+        ORDER BY mean_exec_time DESC
+        LIMIT $1`,
+        [limit],
+      );
+      return {
+        queries: rows.map((r) => ({
+          query: r.query,
+          meanExecTimeMs: parseInt(r.mean_exec_time, 10) || 0,
+          calls: parseInt(r.calls, 10) || 0,
+        })),
+        infoMessage: null,
+      };
+    } catch {
+      return {
+        queries: null,
+        infoMessage:
+          "pg_stat_statements 확장이 비활성화되어 있습니다. RDS 파라미터 그룹에 shared_preload_libraries에 pg_stat_statements 추가 후 DB 재부팅이 필요합니다.",
+      };
+    }
+  }
+
   private resolveWindow(query: AdminDashboardQueryDto) {
     const hours = query.hours ?? 24;
     const bucketMinutes = query.bucketMinutes ?? 60;

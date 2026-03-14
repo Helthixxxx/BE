@@ -1,7 +1,19 @@
-# 로컬 System Health 테스트용 모니터링 스택
-# 사용: docker compose -f docker-compose.monitoring.local.yml up -d
+# 로컬 System Health / Database Health 테스트용 모니터링 스택
+# 사용: docker compose --env-file .env.local -f docker-compose.monitoring.local.yml up -d
 
 services:
+  postgres_exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: postgres-exporter-local
+    ports:
+      - '9187:9187'
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${DB_USERNAME}:${DB_PASSWORD}@host.docker.internal:${DB_PORT:-5432}/${DB_NAME:-helthix}?sslmode=disable"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Mac/Windows: host.docker.internal 기본 지원
+    # Linux: extra_hosts로 host.docker.internal → 호스트 IP 매핑
+
   node-exporter:
     image: prom/node-exporter:latest
     container_name: node-exporter-local

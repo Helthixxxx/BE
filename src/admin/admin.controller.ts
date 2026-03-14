@@ -8,6 +8,7 @@ import { UserRole } from "../users/entities/user.entity";
 import { AdminService } from "./admin.service";
 import { AdminApiErrorsQueryDto } from "./dto/admin-api-errors-query.dto";
 import { AdminDashboardQueryDto } from "./dto/admin-dashboard-query.dto";
+import { AdminDatabaseHealthResponseDto } from "./dto/admin-database-health-response.dto";
 import {
   AdminDashboardApiErrorsResponseDto,
   AdminDashboardAppMetricsResponseDto,
@@ -585,5 +586,36 @@ export class AdminController {
   })
   async getSystemHealth(@Query() query: AdminSystemHealthQueryDto) {
     return await this.adminService.getSystemHealth(query);
+  }
+
+  @Get("database-health")
+  @ApiOperation({
+    summary: "어드민 Database Health 조회",
+    description:
+      "DB 커넥션 풀, Read/Write QPS, 슬로우 쿼리, QPS 추이를 조회합니다. Prometheus postgres_exporter 연동 권장.",
+  })
+  @ApiQuery({ name: "range", required: false, enum: ["1h", "24h", "7d"], example: "24h" })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: "Database Health 조회 성공",
+    type: AdminDatabaseHealthResponseDto,
+  })
+  @ApiResponse({
+    status: HttpStatus.SERVICE_UNAVAILABLE,
+    description: "Prometheus 연결 실패 (해당 시 일부 필드 null 반환)",
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: "인증 실패",
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: "관리자 권한 없음",
+    type: ErrorResponseDto,
+  })
+  async getDatabaseHealth(@Query() query: AdminSystemHealthQueryDto) {
+    return await this.adminService.getDatabaseHealth(query);
   }
 }
